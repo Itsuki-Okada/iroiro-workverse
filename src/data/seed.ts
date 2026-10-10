@@ -12,11 +12,12 @@ import type {
   TaskStatus,
   XpLedgerEntry,
 } from '../types';
-import { addDays, todayKey } from '../lib/utils';
+import { addDays, hashString, todayKey, uid } from '../lib/utils';
 import { levelInfo } from '../game/rules';
+import type { AttendanceEvent } from '../types';
 import { generateAvatar } from './avatarFactory';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 export const DEMO_USER_ID = 'emp-demo';
 
 const nowIso = () => new Date().toISOString();
@@ -140,6 +141,60 @@ const TASK_SEEDS: TaskSeed[] = [
   ['広告クリエイティブ入稿', 'emp-21', 'cat-sns', 'high', 0, 'todo'],
 ];
 
+const toDateKeyLocal = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/** デモ用の打刻履歴：過去 days 日分（平日のみ）＋今日の状態 */
+export const generateAttendanceHistory = (
+  employees: { id: string }[],
+  attendance: Record<string, AttendanceRecord>,
+  days = 14,
+): AttendanceEvent[] => {
+  const events: AttendanceEvent[] = [];
+  const now = new Date();
+  const at = (base: Date, h: number, m: number) => {
+    const d = new Date(base);
+    d.setHours(h, m, 0, 0);
+    return d.toISOString();
+  };
+  const push = (employeeId: string, type: AttendanceEvent['type'], iso: string) => events.push({ id: uid('att'), employeeId, type, at: iso });
+  for (const e of employees) {
+    for (let back = days; back >= 1; back--) {
+      const day = new Date(now);
+      day.setDate(day.getDate() - back);
+      const wd = day.getDay();
+      if (wd === 0 || wd === 6) continue;
+      const r = hashString(`${e.id}:${day.toDateString()}`);
+      if (r % 17 === 0) continue; // ときどき休み
+      const inMin = 8 * 60 + 25 + (r % 70); // 8:25〜9:35
+      const brMin = 11 * 60 + 50 + ((r >>> 7) % 40); // 11:50〜12:30
+      const brLen = 45 + ((r >>> 11) % 25);
+      const outMin = 17 * 60 + 30 + ((r >>> 15) % 150); // 17:30〜20:00
+      push(e.id, 'clock_in', at(day, Math.floor(inMin / 60), inMin % 60));
+      push(e.id, 'break_start', at(day, Math.floor(brMin / 60), brMin % 60));
+      push(e.id, 'break_end', at(day, Math.floor((brMin + brLen) / 60), (brMin + brLen) % 60));
+      if ((r >>> 19) % 3 === 0) {
+        const mt = 14 * 60 + ((r >>> 21) % 90);
+        push(e.id, 'meeting_start', at(day, Math.floor(mt / 60), mt % 60));
+        push(e.id, 'meeting_end', at(day, Math.floor((mt + 60) / 60), (mt + 60) % 60));
+      }
+      push(e.id, 'clock_out', at(day, Math.floor(outMin / 60), outMin % 60));
+    }
+    // 今日：現在のステータスに合わせる
+    const a = attendance[e.id];
+    // 出勤が今日の場合のみ（旧データからの移行時に前日の状態を今日へ持ち込まない）
+    if (a?.clockInAt && a.status !== 'off' && toDateKeyLocal(a.clockInAt) === todayKey()) {
+      push(e.id, 'clock_in', a.clockInAt);
+      const since = new Date(Math.max(new Date(a.clockInAt).getTime() + 30 * 60000, now.getTime() - 20 * 60000)).toISOString();
+      if (a.status === 'away') push(e.id, 'break_start', since);
+      if (a.status === 'meeting') push(e.id, 'meeting_start', since);
+    }
+  }
+  return events.sort((x, y) => x.at.localeCompare(y.at));
+};
+
 const EMP_DEPT = Object.fromEntries(EMPLOYEE_SEEDS.map((e) => [e[0], e[2]]));
 const FULL_NAME = Object.fromEntries(EMPLOYEE_SEEDS.map((e) => [e[0], e[7]]));
 
@@ -209,6 +264,8 @@ export const createSeedState = (): PersistedState => {
     categories: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
     projects: PROJECTS.map((p) => ({ ...p })),
     attendance,
+    attendanceLog: generateAttendanceHistory(employees, attendance),
+    attendanceCorrections: {},
     xpLedger,
     achievements: [
       { achievementId: 'first-quest', employeeId: DEMO_USER_ID, at: createdAt },
@@ -276,6 +333,8 @@ export const createEmptyState = (): PersistedState => {
       tasks: [],
       projects: [],
       attendance: { [DEMO_USER_ID]: { employeeId: DEMO_USER_ID, status: 'off' } },
+      attendanceLog: [],
+      attendanceCorrections: {},
       xpLedger: [],
       achievements: [],
       missionClaims: [],

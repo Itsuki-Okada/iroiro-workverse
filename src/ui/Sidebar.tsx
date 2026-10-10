@@ -1,4 +1,4 @@
-import { Award, Building2, CloudUpload, ChevronsLeft, ChevronsRight, FolderKanban, LayoutDashboard, Network, Settings, Swords, Users } from 'lucide-react';
+import { Award, Building2, Clock, CloudUpload, ChevronsLeft, ChevronsRight, FolderKanban, LayoutDashboard, Network, Settings, Swords, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useApp } from '../store/appStore';
 import { useUi } from '../store/uiStore';
@@ -9,6 +9,7 @@ import { MISSIONS } from '../game/rules';
 const ITEMS: { key: ViewKey; label: string; icon: LucideIcon }[] = [
   { key: 'office', label: 'オフィス', icon: Building2 },
   { key: 'quests', label: 'クエスト', icon: Swords },
+  { key: 'attendance', label: '勤怠', icon: Clock },
   { key: 'projects', label: 'プロジェクト', icon: FolderKanban },
   { key: 'files', label: '制作データ', icon: CloudUpload },
   { key: 'employees', label: 'メンバー一覧', icon: Users },

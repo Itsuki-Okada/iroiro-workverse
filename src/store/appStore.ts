@@ -6,6 +6,8 @@ import { create } from 'zustand';
 import type {
   AppNotification,
   AssetMeta,
+  AttendanceCorrection,
+  AttendanceEvent,
   AttendanceRecord,
   AttendanceStatus,
   AvatarConfig,
@@ -37,6 +39,7 @@ import {
   TASK_XP,
 } from '../game/rules';
 import { useUi } from './uiStore';
+import { correctionKey, LOG_RETENTION_DAYS, transitionEvents } from '../game/timesheet';
 
 export type TaskInput = Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'xpAwarded' | 'completedAt' | 'createdBy'>;
 
@@ -55,6 +58,8 @@ interface AppState {
   setMyStatus: (status: Exclude<AttendanceStatus, 'off'>) => void;
   setEmployeeStatus: (employeeId: string, status: AttendanceStatus) => void;
   touch: () => void;
+  saveCorrection: (c: Omit<AttendanceCorrection, 'by' | 'at'>) => void;
+  removeCorrection: (employeeId: string, date: string) => void;
 
   // タスク
   createTask: (input: TaskInput) => string;
@@ -91,6 +96,12 @@ interface AppState {
 
 const nowIso = () => new Date().toISOString();
 
+/** 保持期間を過ぎた打刻を削除 */
+const pruneLog = (log: AttendanceEvent[]) => {
+  const limit = Date.now() - LOG_RETENTION_DAYS * 86400000;
+  return log.filter((e) => new Date(e.at).getTime() >= limit);
+};
+
 // ---------- 日付変更時のロールオーバー ----------
 // サーバーがない初期版のため、他の社員（デモNPC）の勤怠は日ごとに疑似生成する。
 // 最後にログインしていたユーザーは「退勤し忘れ」として自動クローズする。
@@ -101,8 +112,22 @@ const rollover = (state: PersistedState): PersistedState => {
   const lastUser = sessionStore.get();
   const attendance: Record<string, AttendanceRecord> = {};
   const notifications: AppNotification[] = [...b.notifications];
+  const log: AttendanceEvent[] = [...(b.attendanceLog ?? [])];
+  const addEvents = (employeeId: string, from: AttendanceStatus, to: AttendanceStatus, at: string, auto = false) => {
+    for (const type of transitionEvents(from, to)) log.push({ id: uid('att'), employeeId, type, at, ...(auto ? { auto } : {}) });
+  };
   for (const e of b.employees) {
     const prev = b.attendance[e.id] ?? { employeeId: e.id, status: 'off' };
+    // 前日の勤務が閉じていなければ自動で退勤打刻
+    if (prev.status !== 'off') {
+      let closeAt = prev.lastSeenAt ?? prev.clockInAt ?? nowIso();
+      if (!(e.id === lastUser || e.isDemoUser) && prev.clockInAt) {
+        const c = new Date(prev.clockInAt);
+        c.setHours(18, 10 + (hashString(e.id) % 50), 0, 0);
+        closeAt = c.toISOString();
+      }
+      addEvents(e.id, prev.status, 'off', closeAt, e.id === lastUser || !!e.isDemoUser);
+    }
     if (e.id === lastUser || e.isDemoUser) {
       const wasOn = prev.status !== 'off';
       attendance[e.id] = wasOn
@@ -131,10 +156,14 @@ const rollover = (state: PersistedState): PersistedState => {
       clockInAt: status === 'off' ? undefined : d.toISOString(),
       lastSeenAt: nowIso(),
     };
+    if (status !== 'off') {
+      addEvents(e.id, 'off', 'working', d.toISOString());
+      if (status !== 'working') addEvents(e.id, 'working', status, new Date(Math.min(Date.now(), d.getTime() + 3 * 3600000)).toISOString());
+    }
   }
   return {
     ...state,
-    business: { ...b, attendance, notifications: notifications.slice(0, 50), lastActiveDate: today },
+    business: { ...b, attendance, attendanceLog: pruneLog(log), notifications: notifications.slice(0, 300), lastActiveDate: today },
   };
 };
 
@@ -234,13 +263,18 @@ export const useApp = create<AppState>((set, get) => {
     return true;
   };
 
+  /** 勤怠状態の更新。ステータスが変わった場合は打刻（出勤・休憩・会議・退勤）を記録する */
   const setAttendance = (employeeId: string, patch: Partial<AttendanceRecord>) =>
-    patchBusiness((b) => ({
-      attendance: {
-        ...b.attendance,
-        [employeeId]: { ...(b.attendance[employeeId] ?? { employeeId, status: 'off' }), ...patch },
-      },
-    }));
+    patchBusiness((b) => {
+      const prev = b.attendance[employeeId] ?? { employeeId, status: 'off' as const };
+      const next = { ...prev, ...patch };
+      const at = nowIso();
+      const added: AttendanceEvent[] = transitionEvents(prev.status, next.status).map((type) => ({ id: uid('att'), employeeId, type, at }));
+      return {
+        attendance: { ...b.attendance, [employeeId]: next },
+        ...(added.length ? { attendanceLog: pruneLog([...(b.attendanceLog ?? []), ...added]) } : {}),
+      };
+    });
 
   return {
     business: initial.business,
@@ -329,6 +363,22 @@ export const useApp = create<AppState>((set, get) => {
       if (status !== 'off' && att?.status === 'off') ui().pushFx({ kind: 'arrive', employeeId });
       setAttendance(employeeId, patch);
     },
+
+    saveCorrection: (c) => {
+      const me = get().currentUserId;
+      if (!me) return;
+      patchBusiness((b) => ({
+        attendanceCorrections: { ...(b.attendanceCorrections ?? {}), [correctionKey(c.employeeId, c.date)]: { ...c, by: me, at: nowIso() } },
+      }));
+      ui().toast({ tone: 'success', title: '勤怠を修正しました', body: c.date });
+    },
+
+    removeCorrection: (employeeId, date) =>
+      patchBusiness((b) => {
+        const next = { ...(b.attendanceCorrections ?? {}) };
+        delete next[correctionKey(employeeId, date)];
+        return { attendanceCorrections: next };
+      }),
 
     touch: () => {
       const id = get().currentUserId;
@@ -462,7 +512,11 @@ export const useApp = create<AppState>((set, get) => {
         },
       }));
       set((s) => ({ presentation: { ...s.presentation, avatars: { ...s.presentation.avatars, [id]: generateAvatar(id) } } }));
-      if (status !== 'off') ui().pushFx({ kind: 'arrive', employeeId: id });
+      if (status !== 'off') {
+        const evs: AttendanceEvent[] = transitionEvents('off', status).map((type) => ({ id: uid('att'), employeeId: id, type, at: now }));
+        patchBusiness((b) => ({ attendanceLog: [...(b.attendanceLog ?? []), ...evs] }));
+        ui().pushFx({ kind: 'arrive', employeeId: id });
+      }
       return id;
     },
 

@@ -22,6 +22,8 @@ const BUSINESS_KEYS: (keyof BusinessData)[] = [
   'categories',
   'projects',
   'attendance',
+  'attendanceLog',
+  'attendanceCorrections',
   'xpLedger',
   'achievements',
   'missionClaims',

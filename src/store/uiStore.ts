@@ -9,6 +9,7 @@ type DOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 export type ViewKey =
   | 'office'
   | 'quests'
+  | 'attendance'
   | 'projects'
   | 'files'
   | 'employees'

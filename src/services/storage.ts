@@ -4,7 +4,7 @@
 // 将来は ApiStorageAdapter / リアルタイム同期アダプタに差し替える想定。
 // ============================================================
 import type { PersistedState } from '../types';
-import { SCHEMA_VERSION } from '../data/seed';
+import { generateAttendanceHistory, SCHEMA_VERSION } from '../data/seed';
 
 export interface StorageAdapter {
   load(): PersistedState | null;
@@ -17,7 +17,16 @@ export const SESSION_KEY = 'workverse:session';
 
 /** スキーマバージョンごとのマイグレーション。key = 移行元バージョン */
 const MIGRATIONS: Record<number, (s: any) => any> = {
-  // 例: 0: (s) => ({ ...s, schemaVersion: 1, business: { ...s.business, newField: [] } }),
+  // v2 → v3：勤怠の打刻履歴を追加（既存データは保持し、デモ用の過去履歴を補う）
+  2: (s) => ({
+    ...s,
+    schemaVersion: 3,
+    business: {
+      ...s.business,
+      attendanceLog: generateAttendanceHistory(s.business.employees ?? [], s.business.attendance ?? {}),
+      attendanceCorrections: {},
+    },
+  }),
 };
 
 const migrate = (raw: any): PersistedState | null => {
@@ -31,6 +40,8 @@ const migrate = (raw: any): PersistedState | null => {
   if (s.schemaVersion > SCHEMA_VERSION) return null;
   if (!s.business || !s.presentation) return null;
   s.business.assets ??= [];
+  s.business.attendanceLog ??= [];
+  s.business.attendanceCorrections ??= {};
   return s as PersistedState;
 };
 

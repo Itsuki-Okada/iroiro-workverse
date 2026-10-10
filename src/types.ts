@@ -55,6 +55,30 @@ export interface AttendanceRecord {
   autoClosed?: boolean;
 }
 
+/** 勤怠の打刻イベント（出勤・休憩・会議・退勤） */
+export type AttendanceEventType = 'clock_in' | 'clock_out' | 'break_start' | 'break_end' | 'meeting_start' | 'meeting_end';
+
+export interface AttendanceEvent {
+  id: ID;
+  employeeId: ID;
+  type: AttendanceEventType;
+  at: string; // ISO
+  /** 退勤し忘れなどによる自動打刻 */
+  auto?: boolean;
+}
+
+/** 勤怠の手動修正（日単位）。key = `${employeeId}:${YYYY-MM-DD}` */
+export interface AttendanceCorrection {
+  employeeId: ID;
+  date: string;
+  clockIn?: string; // HH:MM
+  clockOut?: string; // HH:MM
+  breakMinutes?: number;
+  note: string;
+  by: ID;
+  at: string;
+}
+
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type TaskStatus = 'todo' | 'in_progress' | 'done';
 
@@ -188,6 +212,9 @@ export interface BusinessData {
   categories: Category[];
   projects: Project[];
   attendance: Record<ID, AttendanceRecord>;
+  /** 打刻履歴（勤怠管理） */
+  attendanceLog: AttendanceEvent[];
+  attendanceCorrections: Record<string, AttendanceCorrection>;
   xpLedger: XpLedgerEntry[];
   achievements: UnlockedAchievement[];
   missionClaims: MissionClaim[];

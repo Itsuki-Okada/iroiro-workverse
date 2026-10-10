@@ -17,12 +17,14 @@ import { DepartmentsView, EmployeesView } from './ui/views/OrgViews';
 import { AchievementsView } from './ui/views/AchievementsView';
 import { SettingsView } from './ui/views/SettingsView';
 import { FilesView } from './ui/views/FilesView';
+import { AttendanceView } from './ui/views/AttendanceView';
 
 const DashboardView = lazy(() => import('./ui/views/DashboardView').then((m) => ({ default: m.DashboardView })));
 
 const VIEWS = {
   quests: QuestsView,
   projects: ProjectsView,
+  attendance: AttendanceView,
   files: FilesView,
   employees: EmployeesView,
   departments: DepartmentsView,

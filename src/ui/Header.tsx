@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Bell, ChevronDown, LogOut, Palette, Power, Settings, UserRound } from 'lucide-react';
+import { Bell, ChevronDown, Clock as ClockIcon, LogOut, Palette, Power, Settings, UserRound } from 'lucide-react';
 import type { AttendanceStatus } from '../types';
 import { useApp } from '../store/appStore';
 import { useUi } from '../store/uiStore';
@@ -95,6 +95,15 @@ const AttendanceMenu = () => {
             </button>
           ))}
           <div className="my-1 h-px bg-white/[0.06]" />
+          <button
+            className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-zinc-300 hover:bg-white/[0.06]"
+            onClick={() => {
+              useUi.getState().setView('attendance');
+              close();
+            }}
+          >
+            <ClockIcon size={15} /> 勤怠を見る
+          </button>
           {status === 'off' ? (
             <button className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-cyan-200 hover:bg-white/[0.06]" onClick={() => (clockIn(), close())}>
               <Power size={15} /> 出勤する
