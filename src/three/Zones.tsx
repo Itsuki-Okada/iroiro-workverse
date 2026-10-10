@@ -196,7 +196,7 @@ const DeptZone = memo(function DeptZone({
   );
 });
 
-const AreaLabel = memo(function AreaLabel({ name, nameEn, x, z, w }: { name: string; nameEn: string; x: number; z: number; w: number }) {
+const AreaLabel = memo(function AreaLabel({ areaKey, name, nameEn, x, z, w }: { areaKey: string; name: string; nameEn: string; x: number; z: number; w: number }) {
   const mat = useMemo(
     () => new THREE.MeshBasicMaterial({ map: makeFloorLabelTexture(nameEn), transparent: true, depthWrite: false, opacity: 0.6 }),
     [nameEn],
@@ -213,9 +213,12 @@ const AreaLabel = memo(function AreaLabel({ name, nameEn, x, z, w }: { name: str
     <group>
       <mesh geometry={getGeometries().plane} material={mat} rotation-x={-Math.PI / 2} position={[x, 0.025, z]} scale={[lw, lw * 0.156, 1]} />
       <Label3D position={[x, 2.2, z]} zIndex={5}>
-        <div className="whitespace-nowrap rounded-full border border-white/5 bg-zinc-900/55 px-2.5 py-0.5 text-[10px] text-zinc-400 backdrop-blur">
+        <button
+          onClick={() => useUi.getState().cameraTo({ kind: 'area', area: areaKey })}
+          className="pointer-events-auto whitespace-nowrap rounded-full border border-white/10 bg-zinc-900/65 px-2.5 py-0.5 text-[10px] text-zinc-300 backdrop-blur transition hover:border-white/30 hover:text-white"
+        >
           {name}
-        </div>
+        </button>
       </Label3D>
     </group>
   );
@@ -259,7 +262,7 @@ export const Zones = ({
       const [w, d] = rectSize(a.rect);
       // ラベルは床の手前寄りに配置（家具と重ならないように）
       const lz = a.key === 'reception' ? a.rect.z1 - 2.2 : a.key === 'lounge' ? a.rect.z1 - 0.8 : z + d / 2 - 0.9;
-      return <AreaLabel key={a.key} name={a.name} nameEn={a.nameEn} x={x} z={lz} w={w} />;
+      return <AreaLabel key={a.key} areaKey={a.key} name={a.name} nameEn={a.nameEn} x={x} z={lz} w={w} />;
     })}
     <DeskLights desks={desks} />
   </group>

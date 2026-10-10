@@ -22,7 +22,11 @@ export type CameraCommand =
   | { kind: 'department'; departmentId: string; nonce: number }
   | { kind: 'employee'; employeeId: string; nonce: number }
   | { kind: 'zoom'; delta: number; nonce: number }
-  | { kind: 'rotate'; delta: number; nonce: number };
+  | { kind: 'rotate'; delta: number; nonce: number }
+  /** 指定地点へ移動してズーム（ダブルタップ） */
+  | { kind: 'point'; x: number; z: number; nonce: number }
+  /** 共用エリア（休憩スペース・会議室など）へズーム */
+  | { kind: 'area'; area: string; nonce: number };
 
 export type FxEvent =
   | { id: string; kind: 'taskComplete'; employeeId: string; xp: number }

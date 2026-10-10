@@ -10,7 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useUi } from '../store/uiStore';
 import type { CameraCommand } from '../store/uiStore';
 import { useApp } from '../store/appStore';
-import { BUILDING, DEFAULT_CAMERA, rectCenter, rectSize } from './layout';
+import { AREAS, BUILDING, DEFAULT_CAMERA, rectCenter, rectSize } from './layout';
 import { departmentRect } from './placements';
 import { isMobileNow } from '../ui/hooks';
 import type { AvatarPlacement } from './placements';
@@ -79,6 +79,22 @@ export const CameraRig = ({
         // スマホは下部シートに隠れないよう対象を画面上寄りに
         if (isMobileNow()) toward(p.x, -0.4, p.z, 15, 0.85, 0);
         else toward(p.x, 0.9, p.z, 10, 0.9, 0.7);
+        break;
+      }
+      case 'point': {
+        // キャラクターの動きが見える距離まで寄る
+        if (isMobileNow()) toward(cmd.x, -0.6, cmd.z, 21, 0.85, 0);
+        else toward(cmd.x, 0.6, cmd.z, 16, 0.88, 0);
+        break;
+      }
+      case 'area': {
+        const r = AREAS[cmd.area as keyof typeof AREAS];
+        if (!r) return;
+        const [x, z] = rectCenter(r);
+        const [w, d] = rectSize(r);
+        const dist = Math.max(w, d) * 0.75 + 5;
+        if (isMobileNow()) toward(x, -1.2, z, dist * 1.45, 0.85, 0);
+        else toward(x, 0.6, z, dist, 0.85, 1.5);
         break;
       }
       case 'zoom':

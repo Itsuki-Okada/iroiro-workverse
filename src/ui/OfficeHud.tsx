@@ -160,7 +160,7 @@ const CameraBar = () => {
           <Maximize size={15} /> 全体表示
         </button>
       </div>
-      <div className="hidden text-[10px] text-zinc-500 md:block">ドラッグ：回転 ／ 右ドラッグ：移動 ／ ホイール：ズーム ／ クリック：社員を選択</div>
+      <div className="hidden text-[10px] text-zinc-500 md:block">ドラッグ：回転 ／ 右ドラッグ：移動 ／ ホイール：ズーム ／ ダブルクリック：その場所へ移動 ／ エリア名クリック：ズーム</div>
     </div>
   );
 };
@@ -305,9 +305,34 @@ const ArrivalSequence = () => {
   );
 };
 
+/** 操作方法の案内（初回のみ） */
+const useGestureTip = () => {
+  const mobile = useIsMobile();
+  useEffect(() => {
+    const key = 'workverse:tip-gestures';
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, '1');
+    } catch {
+      return;
+    }
+    const t = setTimeout(
+      () =>
+        useUi.getState().toast({
+          tone: 'info',
+          title: mobile ? 'ダブルタップでその場所へ移動' : 'ダブルクリックでその場所へ移動',
+          body: mobile ? '休憩スペースなどはエリア名をタップするとズームします' : '休憩スペースなどはエリア名をクリックするとズームします',
+        }),
+      3200,
+    );
+    return () => clearTimeout(t);
+  }, [mobile]);
+};
+
 export const OfficeHud = () => {
   const selectedEmployee = useUi((s) => s.selectedEmployeeId);
   const selectedDept = useUi((s) => s.selectedDepartmentId);
+  useGestureTip();
   return (
     <>
       <DepartmentList />

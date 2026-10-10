@@ -19,6 +19,7 @@ import type { StandaloneChair } from './Workstations';
 import { OfficeAvatars } from './OfficeAvatars';
 import { Effects } from './Effects';
 import { CameraRig } from './CameraRig';
+import { FloorPicker } from './FloorPicker';
 import { MEETING_SEATS } from './layout';
 import { CEO_CHAIR, useOfficeLayout } from './placements';
 import { FloorPlan2D } from '../ui/FloorPlan2D';
@@ -155,6 +156,7 @@ const SceneContent = () => {
       <OfficeAvatars layout={layout} />
       <Effects placements={layout.placements} />
       <CameraRig placements={layout.placements} homeSeats={layout.homeSeats} />
+      <FloorPicker />
       <ReadySignal />
     </>
   );
