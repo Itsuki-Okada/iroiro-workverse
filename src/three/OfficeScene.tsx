@@ -1,10 +1,10 @@
 // ============================================================
 // 3Dオフィス シーンのルート
 // ============================================================
-import { Component, Suspense, useEffect, useMemo, useRef } from 'react';
+import { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { AdaptiveDpr, Environment, Lightformer } from '@react-three/drei';
+import { Environment, Lightformer, PerformanceMonitor } from '@react-three/drei';
 import * as THREE from 'three';
 import { useApp } from '../store/appStore';
 import { useUi } from '../store/uiStore';
@@ -194,6 +194,11 @@ export const OfficeScene = () => {
   const quality = useQuality();
   const mobile = useIsMobile();
   const active = view === 'office';
+  // 解像度：スマホは端末の画素密度（最大2倍）から開始し、重い端末では自動で少し下げる
+  const maxDpr = mobile ? Math.min(2, window.devicePixelRatio || 1) : quality === 'high' ? 1.5 : 1.25;
+  const minDpr = mobile ? Math.min(1.25, maxDpr) : 1;
+  const [dpr, setDpr] = useState(maxDpr);
+  useEffect(() => setDpr(maxDpr), [maxDpr]);
 
   if (!hasWebGL()) return <FloorPlan2D reason="お使いの環境では WebGL が利用できないため、2Dフロアマップを表示しています。" />;
 
@@ -201,7 +206,7 @@ export const OfficeScene = () => {
     <SceneErrorBoundary fallback={<FloorPlan2D reason="3D表示でエラーが発生したため、2Dフロアマップに切り替えました。" />}>
       <Canvas
         shadows={quality === 'high' ? { type: THREE.PCFSoftShadowMap } : false}
-        dpr={quality === 'high' ? [1, 1.5] : [0.75, 1]}
+        dpr={dpr}
         frameloop={active ? 'always' : 'demand'}
         camera={{ fov: 32, near: 0.5, far: 500, position: [34, 40, 44] }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
@@ -213,8 +218,11 @@ export const OfficeScene = () => {
       >
         <color attach="background" args={['#0a0c0f']} />
         <fog attach="fog" args={mobile ? ['#0a0c0f', 160, 420] : ['#0a0c0f', 90, 330]} />
+        <PerformanceMonitor
+          onDecline={() => setDpr((d) => Math.max(minDpr, +(d - 0.25).toFixed(2)))}
+          onIncline={() => setDpr((d) => Math.min(maxDpr, +(d + 0.25).toFixed(2)))}
+        />
         <SceneContent />
-        <AdaptiveDpr pixelated={false} />
       </Canvas>
     </SceneErrorBoundary>
   );
