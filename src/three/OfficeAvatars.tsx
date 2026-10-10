@@ -22,10 +22,12 @@ export const STATUS_COLOR: Record<AttendanceStatus, string> = {
 
 const STATUS_LABEL: Record<AttendanceStatus, string> = {
   working: '作業中',
-  away: '離席中',
+  away: '休憩中',
   meeting: '会議中',
   off: '退勤',
 };
+
+const ACTIVITY_LABEL = { eat: 'ランチ中', coffee: 'コーヒー休憩', chat: '雑談中' } as const;
 
 const markerGeo = new THREE.OctahedronGeometry(0.075, 0);
 const ringGeo = new THREE.RingGeometry(0.42, 0.5, 40);
@@ -159,7 +161,7 @@ const OfficeAvatar = memo(function OfficeAvatar({
         config={config}
         pose={placement.pose}
         working={placement.working}
-        holdingMug={placement.location === 'lounge' && phase > 2.5}
+        activity={placement.activity}
         reactKey={reactKey}
         presence={presence}
         phase={phase}
@@ -200,7 +202,7 @@ const OfficeAvatar = memo(function OfficeAvatar({
             {isMe && <span className="rounded bg-cyan-400/20 px-1 text-[9px] font-semibold text-cyan-200">YOU</span>}
             <span className="font-medium">{employee.name}</span>
             <span className="text-[10px]" style={{ color: STATUS_COLOR[status] }}>
-              {STATUS_LABEL[status]}
+              {status === 'away' && placement.activity ? ACTIVITY_LABEL[placement.activity] : STATUS_LABEL[status]}
             </span>
           </div>
         </Label3D>

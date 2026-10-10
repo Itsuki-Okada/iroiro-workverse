@@ -77,7 +77,7 @@ const EmployeeForm = ({ employee, onClose }: { employee: Employee | null; onClos
             <label className="label">初期ステータス</label>
             <select className="input" value={status} onChange={(e) => setStatus(e.target.value as AttendanceStatus)}>
               <option value="working">出勤中</option>
-              <option value="away">離席中</option>
+              <option value="away">休憩中</option>
               <option value="meeting">会議中</option>
               <option value="off">退勤済み</option>
             </select>
@@ -144,7 +144,7 @@ export const EmployeesView = () => {
         <select className="input w-auto py-1.5" value={status} onChange={(e) => setStatus(e.target.value as AttendanceStatus | '')}>
           <option value="">全ステータス</option>
           <option value="working">出勤中</option>
-          <option value="away">離席中</option>
+          <option value="away">休憩中</option>
           <option value="meeting">会議中</option>
           <option value="off">退勤済み</option>
         </select>

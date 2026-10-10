@@ -422,6 +422,20 @@ const Cafe = memo(function Cafe({ level }: { level: number }) {
           <Cyl s={[0.5, 0.03, 0.5]} p={[0, 0.015, 0]} m={m.metalDark} low cast={false} />
         </group>
       ))}
+      {/* テーブルの上のカップ・ランチプレート */}
+      {CAFE_TABLES.map(([x, z], i) => (
+        <group key={`cup${x}`} position={[x, 1.07, z]}>
+          <Cyl s={[0.07, 0.09, 0.07]} p={[0.15, 0.045, -0.1]} m={m.ceramic} />
+          {i !== 1 && <Cyl s={[0.07, 0.09, 0.07]} p={[-0.18, 0.045, 0.05]} m={m.ceramic} />}
+        </group>
+      ))}
+      {[cx - 0.6, cx + 2.6].map((x) => (
+        <group key={`plate${x}`} position={[x, 0.44, r.z1 - 1.8]}>
+          <Cyl s={[0.26, 0.015, 0.26]} p={[-0.08, 0.01, 0]} m={m.ceramic} />
+          <mesh geometry={getGeometries().sphere} material={m.wood} scale={[0.12, 0.06, 0.1]} position={[-0.08, 0.04, 0]} />
+          <Cyl s={[0.07, 0.09, 0.07]} p={[0.18, 0.045, 0.05]} m={m.ceramic} />
+        </group>
+      ))}
       {/* ベンチソファ（窓際） */}
       <Sofa p={[cx + 1, 0, r.z1 - 0.75]} rotY={0} w={6} />
       <CoffeeTable p={[cx - 0.6, 0, r.z1 - 1.8]} r={0.4} />

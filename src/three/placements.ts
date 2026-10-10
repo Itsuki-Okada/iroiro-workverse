@@ -5,6 +5,7 @@
 import { useMemo } from 'react';
 import type { AttendanceRecord, Department, Employee } from '../types';
 import { useApp } from '../store/appStore';
+import type { BreakActivity } from './layout';
 import {
   AREAS,
   generateSeats,
@@ -40,6 +41,8 @@ export interface AvatarPlacement {
   location: 'desk' | 'meeting' | 'lounge' | 'ceo';
   /** デスク作業中（タイピングアニメーション） */
   working: boolean;
+  /** 休憩中の過ごし方（食事・コーヒー・立ち話） */
+  activity?: BreakActivity;
 }
 
 export interface OfficeLayoutData {
@@ -121,7 +124,7 @@ export const computeOfficeLayout = (
     }
     if (st === 'away' && loungeIdx < LOUNGE_SPOTS.length) {
       const s = LOUNGE_SPOTS[loungeIdx++];
-      placements[e.id] = { employeeId: e.id, x: s.x, z: s.z, rotY: s.rotY, pose: 'stand', location: 'lounge', working: false };
+      placements[e.id] = { employeeId: e.id, x: s.x, z: s.z, rotY: s.rotY, pose: s.pose, location: 'lounge', working: false, activity: s.activity };
       continue;
     }
     placements[e.id] = {

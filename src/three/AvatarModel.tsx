@@ -9,6 +9,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import type { AvatarConfig } from '../types';
 import { COSTUME_STYLE } from '../data/avatarFactory';
 import type { Pose } from './placements';
+import type { BreakActivity } from './layout';
 
 // ---------- 共有ジオメトリ ----------
 const G = (() => {
@@ -79,6 +80,28 @@ const mat = (color: string, roughness = 0.75, side: THREE.Side = THREE.FrontSide
 };
 const EYE = new THREE.MeshStandardMaterial({ color: '#14161a', roughness: 0.3 });
 const BEAK = new THREE.MeshStandardMaterial({ color: '#f2a23a', roughness: 0.5 });
+// 休憩の小物
+const BENTO_BOX = new THREE.MeshStandardMaterial({ color: '#2a1d18', roughness: 0.4 });
+const RICE = new THREE.MeshStandardMaterial({ color: '#f5f2ea', roughness: 0.8 });
+const SIDE_DISH = new THREE.MeshStandardMaterial({ color: '#e0773f', roughness: 0.7 });
+const GREEN = new THREE.MeshStandardMaterial({ color: '#5f9e4f', roughness: 0.7 });
+const CHOPSTICK = new THREE.MeshStandardMaterial({ color: '#b5835a', roughness: 0.6 });
+const COFFEE = new THREE.MeshStandardMaterial({ color: '#3b2318', roughness: 0.3 });
+const G2 = {
+  bento: new THREE.BoxGeometry(0.17, 0.045, 0.12),
+  rice: new THREE.BoxGeometry(0.075, 0.012, 0.1),
+  dish: new THREE.SphereGeometry(0.022, 8, 6),
+  chopstick: new THREE.CylinderGeometry(0.0035, 0.0035, 0.2, 5),
+  coffee: new THREE.CylinderGeometry(0.03, 0.03, 0.005, 12),
+};
+
+/** 0→1→0 のなめらかなパルス（周期 period 秒のうち len 秒間） */
+const pulse = (t: number, period: number, len: number) => {
+  const x = ((t % period) + period) % period;
+  if (x > len) return 0;
+  return Math.sin((x / len) * Math.PI) ** 2;
+};
+const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 const MUG = new THREE.MeshStandardMaterial({ color: '#f0eee9', roughness: 0.4 });
 
 const Hair = ({ c }: { c: AvatarConfig }) => {
@@ -259,8 +282,8 @@ export interface AvatarModelProps {
   pose: Pose;
   /** タイピング中 */
   working?: boolean;
-  /** 立ち姿勢でマグカップを持つ */
-  holdingMug?: boolean;
+  /** 休憩中の過ごし方：食事 / コーヒー / 立ち話 */
+  activity?: BreakActivity;
   /** 変化するとクリック時リアクションを再生 */
   reactKey?: number;
   /** 0=非表示 → 1=表示（登場・退出演出に使用） */
@@ -279,7 +302,7 @@ export const AvatarModel = memo(function AvatarModel({
   config: c,
   pose,
   working = false,
-  holdingMug = false,
+  activity,
   reactKey = 0,
   presence,
   phase = 0,
@@ -293,6 +316,8 @@ export const AvatarModel = memo(function AvatarModel({
   const armR = useRef<THREE.Group>(null!);
   const foreL = useRef<THREE.Group>(null!);
   const foreR = useRef<THREE.Group>(null!);
+  const mug = useRef<THREE.Group>(null);
+  const bento = useRef<THREE.Group>(null);
   const react = useRef({ key: reactKey, start: -10 });
 
   const sit = pose === 'sit';
@@ -330,7 +355,27 @@ export const AvatarModel = memo(function AvatarModel({
       torso.current.rotation.x = working ? -0.14 : -0.04;
       head.current.rotation.x = working ? 0.12 + Math.sin(t * 0.6) * 0.03 : 0.02;
       head.current.rotation.y = working ? Math.sin(t * 0.35) * 0.16 : Math.sin(t * 0.25) * 0.35;
-      if (working) {
+      if (activity === 'eat') {
+        // 左手でお弁当を持ち、右手の箸で口へ運ぶ
+        const bite = pulse(t, 3.2, 1.6);
+        torso.current.rotation.x = -0.08 + bite * 0.06;
+        head.current.rotation.x = 0.28 - bite * 0.3;
+        head.current.rotation.y = Math.sin(t * 0.2) * 0.1;
+        armL.current.rotation.set(0.5, 0, 0.32);
+        foreL.current.rotation.x = 1.35;
+        armR.current.rotation.set(lerp(0.55, 1.2, bite), 0, lerp(-0.25, -0.3, bite));
+        foreR.current.rotation.x = lerp(1.3, 2.35, bite);
+      } else if (activity === 'coffee' || activity === 'chat') {
+        // ソファにもたれてコーヒー
+        const sip = pulse(t, 7, 1.6);
+        torso.current.rotation.x = 0.1;
+        head.current.rotation.x = -0.05 - sip * 0.12;
+        head.current.rotation.y = Math.sin(t * 0.25) * 0.3 * (1 - sip);
+        armL.current.rotation.set(0.35, 0, -0.08);
+        foreL.current.rotation.x = 0.9;
+        armR.current.rotation.set(lerp(0.4, 1.2, sip), 0, lerp(0.1, -0.28, sip));
+        foreR.current.rotation.x = lerp(1.45, 2.4, sip);
+      } else if (working) {
         const k = Math.sin(t * 13) * 0.05;
         armL.current.rotation.set(0.62, 0, -0.1);
         armR.current.rotation.set(0.62, 0, 0.1);
@@ -347,11 +392,23 @@ export const AvatarModel = memo(function AvatarModel({
       hips.current.rotation.z = Math.sin(t * 0.5) * 0.02;
       head.current.rotation.x = Math.sin(t * 0.4) * 0.04;
       head.current.rotation.y = Math.sin(t * 0.3) * 0.3;
-      armL.current.rotation.set(Math.sin(t * 0.5) * 0.03, 0, -0.1);
-      foreL.current.rotation.x = 0.1;
-      if (holdingMug) {
-        armR.current.rotation.set(0.35, 0, 0.12);
-        foreR.current.rotation.x = 1.5 + Math.sin(t * 0.4) * 0.08;
+      if (activity === 'chat') {
+        // 立ち話：左手で身振り、うなずき
+        const g = pulse(t, 4.5, 2.2);
+        armL.current.rotation.set(0.25 + g * 0.35, 0, -0.15 - g * 0.1);
+        foreL.current.rotation.x = 0.6 + g * (0.6 + Math.sin(t * 6) * 0.15);
+        head.current.rotation.x = Math.sin(t * 2.4) * 0.06 * g;
+      } else {
+        armL.current.rotation.set(Math.sin(t * 0.5) * 0.03, 0, -0.1);
+        foreL.current.rotation.x = 0.1;
+      }
+      if (activity === 'coffee' || activity === 'chat') {
+        // マグカップを持ち、ときどき口へ運ぶ
+        const sip = pulse(t, activity === 'chat' ? 9 : 6, 1.6);
+        armR.current.rotation.set(lerp(0.35, 1.2, sip), 0, lerp(0.12, -0.28, sip));
+        foreR.current.rotation.x = lerp(1.5, 2.4, sip) + Math.sin(t * 0.4) * 0.05 * (1 - sip);
+        head.current.rotation.x -= sip * 0.15;
+        if (sip > 0.2) head.current.rotation.y *= 1 - sip;
       } else {
         armR.current.rotation.set(-Math.sin(t * 0.5) * 0.03, 0, 0.1);
         foreR.current.rotation.x = 0.1;
@@ -365,6 +422,10 @@ export const AvatarModel = memo(function AvatarModel({
       foreR.current.rotation.x = 0.3 + Math.sin(rp * Math.PI * 6) * 0.35 * w;
       head.current.rotation.y = 0;
     }
+
+    // 小物は腕の角度を打ち消して水平に保つ
+    if (mug.current) mug.current.rotation.x = -(armR.current.rotation.x + foreR.current.rotation.x) + 0.15;
+    if (bento.current) bento.current.rotation.x = -(armL.current.rotation.x + foreL.current.rotation.x);
   });
 
   return (
@@ -421,6 +482,14 @@ export const AvatarModel = memo(function AvatarModel({
             <group ref={foreL} position-y={-0.27}>
               <mesh geometry={G.forearm} material={limb} position-y={-0.11} castShadow={castShadow} />
               <mesh geometry={G.hand} material={hand} position-y={-0.25} />
+              {activity === 'eat' && (
+                <group ref={bento} position={[0.03, -0.27, -0.02]}>
+                  <mesh geometry={G2.bento} material={BENTO_BOX} position={[0.04, 0.0, -0.03]} />
+                  <mesh geometry={G2.rice} material={RICE} position={[0.0, 0.025, -0.03]} />
+                  <mesh geometry={G2.dish} material={SIDE_DISH} position={[0.075, 0.03, -0.055]} />
+                  <mesh geometry={G2.dish} material={GREEN} position={[0.08, 0.028, -0.005]} scale={0.8} />
+                </group>
+              )}
             </group>
           </group>
           <group ref={armR} position={[0.215, 0.49, 0]}>
@@ -428,7 +497,18 @@ export const AvatarModel = memo(function AvatarModel({
             <group ref={foreR} position-y={-0.27}>
               <mesh geometry={G.forearm} material={limb} position-y={-0.11} castShadow={castShadow} />
               <mesh geometry={G.hand} material={hand} position-y={-0.25} />
-              {holdingMug && !sit && <mesh geometry={G.mug} material={MUG} position={[0, -0.27, -0.04]} rotation-x={-1.45} />}
+              {(activity === 'coffee' || activity === 'chat') && (
+                <group ref={mug} position={[0, -0.27, -0.03]}>
+                  <mesh geometry={G.mug} material={MUG} />
+                  <mesh geometry={G2.coffee} material={COFFEE} position-y={0.044} />
+                </group>
+              )}
+              {activity === 'eat' && (
+                <group position={[0, -0.3, -0.02]} rotation-x={0.5}>
+                  <mesh geometry={G2.chopstick} material={CHOPSTICK} position={[-0.006, -0.06, 0]} />
+                  <mesh geometry={G2.chopstick} material={CHOPSTICK} position={[0.006, -0.06, 0.006]} rotation-z={0.06} />
+                </group>
+              )}
             </group>
           </group>
         </group>

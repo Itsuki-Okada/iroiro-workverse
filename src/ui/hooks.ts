@@ -50,7 +50,18 @@ export const computeDashboard = (b: BusinessData) => {
   const todays = b.tasks.filter((t) => isTodayTask(t, today));
   const present = b.employees.filter((e) => (b.attendance[e.id]?.status ?? 'off') !== 'off').length;
   const s = taskStats(todays);
+  const doneToday = (t: Task) => !!t.completedAt && toDateKey(new Date(t.completedAt)) === today;
+  // 「本日のタスク」の内訳（重複なし）
+  const breakdown = {
+    /** 期限が今日 */
+    dueToday: todays.filter((t) => t.dueDate === today).length,
+    /** 期限を過ぎたもの（未完了、または今日ようやく完了） */
+    overdue: todays.filter((t) => !!t.dueDate && t.dueDate < today).length,
+    /** 期限は先だが今日完了した（前倒し） */
+    early: todays.filter((t) => (!t.dueDate || t.dueDate > today) && doneToday(t)).length,
+  };
   return {
+    breakdown,
     present,
     total: b.employees.length,
     todayTasks: s.total,

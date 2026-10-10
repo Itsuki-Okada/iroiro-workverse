@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Activity, Building2, CheckCircle2, FolderKanban, ListTodo, Percent, Trophy, Users } from 'lucide-react';
+import { Activity, Building2, CheckCircle2, FolderKanban, Info, ListTodo, Percent, Trophy, Users } from 'lucide-react';
 import type { AttendanceStatus } from '../../types';
 import { useApp } from '../../store/appStore';
 import { useUi } from '../../store/uiStore';
@@ -45,10 +45,31 @@ export const DashboardView = () => {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Stat label="本日の出勤人数" value={k.present} sub={`総社員 ${k.total} 名中`} icon={<Users size={16} />} />
         <Stat label="総社員数" value={k.total} sub={`${business.departments.length} 部署`} icon={<Users size={16} />} accent="#9aa7b4" />
-        <Stat label="本日のタスク数" value={k.todayTasks} sub="期限が本日・期限切れ・本日完了" icon={<ListTodo size={16} />} accent="#4fa3ff" />
-        <Stat label="完了タスク数" value={k.doneTasks} sub="本日分" icon={<CheckCircle2 size={16} />} accent="#3ddc97" />
+        <Stat
+          label="本日のタスク数"
+          value={k.todayTasks}
+          sub={
+            <span className="flex flex-wrap gap-x-2 gap-y-0.5">
+              <span>今日まで {k.breakdown.dueToday}</span>
+              {k.breakdown.overdue > 0 && <span className="text-red-300">遅れ {k.breakdown.overdue}</span>}
+              {k.breakdown.early > 0 && <span className="text-emerald-300">前倒し {k.breakdown.early}</span>}
+            </span>
+          }
+          icon={<ListTodo size={16} />}
+          accent="#4fa3ff"
+        />
+        <Stat label="完了タスク数" value={k.doneTasks} sub="本日のタスクのうち完了" icon={<CheckCircle2 size={16} />} accent="#3ddc97" />
         <Stat label="タスク達成率" value={`${Math.round(k.ratio * 100)}%`} sub={<Progress value={k.ratio} h={4} className="mt-1" />} icon={<Percent size={16} />} />
         <Stat label="進行中のプロジェクト" value={k.activeProjects} sub={`全 ${business.projects.length} 件`} icon={<FolderKanban size={16} />} accent="#f2b45a" />
+      </div>
+
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs leading-relaxed text-zinc-400">
+        <Info size={14} className="mt-0.5 shrink-0 text-zinc-500" />
+        <span>
+          <b className="font-medium text-zinc-300">本日のタスク</b>
+          ＝「今日が期限のタスク」＋「期限を過ぎてまだ終わっていないタスク（遅れ）」＋「期限は先だけど今日終わらせたタスク（前倒し）」。
+          今日やるべき仕事の量と、その達成状況を表します。
+        </span>
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">

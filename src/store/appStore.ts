@@ -316,7 +316,7 @@ export const useApp = create<AppState>((set, get) => {
         get().clockIn();
       }
       setAttendance(id, { status, lastSeenAt: nowIso() });
-      const label = { working: '出勤中', away: '離席中', meeting: '会議中' }[status];
+      const label = { working: '出勤中', away: '休憩中', meeting: '会議中' }[status];
       ui().toast({ tone: 'info', title: `ステータス：${label}` });
     },
 

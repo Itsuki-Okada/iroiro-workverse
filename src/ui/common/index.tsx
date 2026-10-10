@@ -105,7 +105,7 @@ export const Avatar2D = ({ employeeId, size = 36, ring }: { employeeId: string; 
 
 export const STATUS_META: Record<AttendanceStatus, { label: string; color: string; dot: string }> = {
   working: { label: '出勤中', color: 'text-emerald-300', dot: '#3ddc97' },
-  away: { label: '離席中', color: 'text-amber-300', dot: '#f2b45a' },
+  away: { label: '休憩中', color: 'text-amber-300', dot: '#f2b45a' },
   meeting: { label: '会議中', color: 'text-violet-300', dot: '#9b8cff' },
   off: { label: '退勤済み', color: 'text-zinc-400', dot: '#6b7280' },
 };

@@ -167,28 +167,69 @@ export const CAFE_TABLES: [number, number][] = (() => {
   ];
 })();
 
-/** 休憩スペースで立っている位置（離席中の社員） */
-export const LOUNGE_SPOTS: { x: number; z: number; rotY: number }[] = (() => {
-  const spots: { x: number; z: number; rotY: number }[] = [];
-  for (const [tx, tz] of CAFE_TABLES) {
+/** 休憩中の過ごし方 */
+export type BreakActivity = 'eat' | 'coffee' | 'chat';
+
+export interface BreakSpot {
+  x: number;
+  z: number;
+  rotY: number;
+  pose: 'sit' | 'stand';
+  activity: BreakActivity;
+}
+
+/**
+ * 休憩スポット（離席中の社員）。
+ * カフェのソファでランチ、共有スペースのソファでコーヒー、ハイテーブルで立ち飲み・立ち話。
+ * 人数が少なくても場所がばらけるよう、種類を交互に並べている。
+ */
+export const LOUNGE_SPOTS: BreakSpot[] = (() => {
+  const [cx] = rectCenter(AREAS.cafe);
+  const [lx, lz] = rectCenter(AREAS.lounge);
+  // カフェ窓際のベンチソファ（正面 -Z 向き）
+  const cafeSofa: BreakSpot[] = [-2.1, -0.7, 0.7, 2.1].map((dx, i) => ({
+    x: cx + 1 + dx,
+    z: AREAS.cafe.z1 - 0.81,
+    rotY: 0,
+    pose: 'sit',
+    activity: i % 2 === 0 ? 'eat' : 'coffee',
+  }));
+  // 共有スペースのソファ（コーヒーテーブルを囲む）
+  const loungeSofa: BreakSpot[] = [
+    { x: lx - 2.24, z: lz - 0.6, rotY: -Math.PI / 2, pose: 'sit', activity: 'coffee' },
+    { x: lx + 2.24, z: lz + 0.6, rotY: Math.PI / 2, pose: 'sit', activity: 'eat' },
+    { x: lx - 2.24, z: lz + 0.6, rotY: -Math.PI / 2, pose: 'sit', activity: 'eat' },
+    { x: lx + 2.24, z: lz - 0.6, rotY: Math.PI / 2, pose: 'sit', activity: 'coffee' },
+    { x: lx, z: lz - 2.04, rotY: Math.PI, pose: 'sit', activity: 'coffee' },
+  ];
+  // カフェのハイテーブル（立ち飲み・立ち話）
+  const highTables: BreakSpot[] = [];
+  CAFE_TABLES.forEach(([tx, tz], t) => {
     const around: [number, number][] = [
       [tx - 0.8, tz + 0.1],
       [tx + 0.8, tz + 0.1],
       [tx, tz + 0.85],
     ];
-    for (const [x, z] of around) spots.push({ x, z, rotY: faceTowards(x, z, tx, tz) });
-  }
+    around.forEach(([x, z], i) =>
+      highTables.push({ x, z, rotY: faceTowards(x, z, tx, tz), pose: 'stand', activity: (t + i) % 3 === 0 ? 'chat' : 'coffee' }),
+    );
+  });
   // 共有スペースで立ち話
-  const [lx, lz] = rectCenter(AREAS.lounge);
-  const pairs: [number, number, number, number][] = [
+  const pairs: BreakSpot[] = [];
+  for (const [ax, az, bx, bz] of [
     [lx - 5.5, lz + 2.4, lx - 4.6, lz + 2.9],
     [lx + 4.6, lz + 2.6, lx + 5.5, lz + 2.1],
-  ];
-  for (const [ax, az, bx, bz] of pairs) {
-    spots.push({ x: ax, z: az, rotY: faceTowards(ax, az, bx, bz) });
-    spots.push({ x: bx, z: bz, rotY: faceTowards(bx, bz, ax, az) });
+  ]) {
+    pairs.push({ x: ax, z: az, rotY: faceTowards(ax, az, bx, bz), pose: 'stand', activity: 'chat' });
+    pairs.push({ x: bx, z: bz, rotY: faceTowards(bx, bz, ax, az), pose: 'stand', activity: 'coffee' });
   }
-  return spots;
+  // 種類を交互に並べる
+  const groups = [cafeSofa, highTables, loungeSofa, pairs];
+  const out: BreakSpot[] = [];
+  for (let i = 0; out.length < groups.reduce((n, g) => n + g.length, 0); i++) {
+    for (const g of groups) if (g[i]) out.push(g[i]);
+  }
+  return out;
 })();
 
 export const DEFAULT_CAMERA = {
