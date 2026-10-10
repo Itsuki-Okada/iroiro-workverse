@@ -66,10 +66,12 @@ const AttendanceMenu = () => {
   const setMyStatus = useApp((s) => s.setMyStatus);
   const clockIn = useApp((s) => s.clockIn);
   const clockOut = useApp((s) => s.clockOut);
+  const setMyMessage = useApp((s) => s.setMyMessage);
+  const [draft, setDraft] = useState('');
   const status: AttendanceStatus = att?.status ?? 'off';
   return (
     <Dropdown
-      width="w-60"
+      width="w-72"
       trigger={(open) => (
         <button className={cx('btn h-9 gap-2', open && 'border-white/25')}>
           <StatusPill status={status} />
@@ -94,6 +96,40 @@ const AttendanceMenu = () => {
               {status === s && <span className="text-[10px] text-cyan-300">現在</span>}
             </button>
           ))}
+          {status !== 'off' && (
+            <>
+              <div className="my-1 h-px bg-white/[0.06]" />
+              <div className="px-2.5 py-1.5 text-[11px] text-zinc-500">ひとこと（頭上の吹き出し）</div>
+              {att?.message && (
+                <div className="mx-2.5 mb-1.5 flex items-center justify-between rounded-lg bg-white/[0.05] px-2 py-1 text-xs">
+                  <span className="truncate">💬 {att.message}</span>
+                  <button className="text-zinc-500 hover:text-zinc-200" onClick={() => setMyMessage(null)}>
+                    消す
+                  </button>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-1 px-2.5 pb-1.5">
+                {['集中モード中🎧', 'ランチ行ってきます🍙', 'MTG中📅', '手が空いてます🙌', '外出中🚶'].map((m) => (
+                  <button key={m} className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-300 hover:bg-white/[0.06]" onClick={() => setMyMessage(m)}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+              <form
+                className="flex gap-1 px-2.5 pb-1.5"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (draft.trim()) setMyMessage(draft);
+                  setDraft('');
+                }}
+              >
+                <input className="input py-1 text-xs" maxLength={30} placeholder="自由に入力（30文字まで）" value={draft} onChange={(e) => setDraft(e.target.value)} />
+                <button className="btn shrink-0 px-2 py-1 text-xs" type="submit">
+                  設定
+                </button>
+              </form>
+            </>
+          )}
           <div className="my-1 h-px bg-white/[0.06]" />
           <button
             className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-zinc-300 hover:bg-white/[0.06]"

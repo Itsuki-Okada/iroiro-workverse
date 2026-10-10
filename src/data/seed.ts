@@ -80,6 +80,15 @@ const EMPLOYEE_SEEDS: EmpSeed[] = [
   ['emp-21', 'T.MAEDA', 'dept-sns', '広告運用', 260, 'away', [9, 30]],
 ];
 
+/** 頭上の吹き出し（ひとこと）の初期値 */
+const SEED_MESSAGES: Record<string, string> = {
+  'emp-11': '集中モード中🎧',
+  'emp-04': 'ランチ行ってきます🍙',
+  'emp-15': 'ムービー書き出し中…⏳',
+  'emp-19': '撮影準備中📷',
+  'emp-03': '手が空いてます🙌',
+};
+
 const ROLE_BY_ID: Record<string, Employee['role']> = {
   [DEMO_USER_ID]: 'admin',
   'emp-02': 'manager',
@@ -224,6 +233,7 @@ export const createSeedState = (): PersistedState => {
       status,
       clockInAt: clockIn ? atToday(clockIn[0], clockIn[1]) : undefined,
       lastSeenAt: clockIn ? createdAt : undefined,
+      message: SEED_MESSAGES[id],
     };
   }
 

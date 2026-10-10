@@ -87,7 +87,17 @@ const SIDE_DISH = new THREE.MeshStandardMaterial({ color: '#e0773f', roughness: 
 const GREEN = new THREE.MeshStandardMaterial({ color: '#5f9e4f', roughness: 0.7 });
 const CHOPSTICK = new THREE.MeshStandardMaterial({ color: '#b5835a', roughness: 0.6 });
 const COFFEE = new THREE.MeshStandardMaterial({ color: '#3b2318', roughness: 0.3 });
+const HAT_RED = new THREE.MeshStandardMaterial({ color: '#c8283a', roughness: 0.7 });
+const HAT_WHITE = new THREE.MeshStandardMaterial({ color: '#f6f4f0', roughness: 0.9 });
+const HAT_BLACK = new THREE.MeshStandardMaterial({ color: '#1b1820', roughness: 0.6 });
+const HAT_BAND = new THREE.MeshStandardMaterial({ color: '#8a4bd6', roughness: 0.6 });
 const G2 = {
+  santaCone: new THREE.ConeGeometry(0.13, 0.28, 16),
+  santaBrim: new THREE.TorusGeometry(0.125, 0.03, 8, 20),
+  santaBall: new THREE.SphereGeometry(0.035, 10, 8),
+  witchCone: new THREE.ConeGeometry(0.11, 0.32, 14),
+  witchBrim: new THREE.CylinderGeometry(0.22, 0.22, 0.012, 24),
+  witchBand: new THREE.CylinderGeometry(0.112, 0.118, 0.035, 18),
   bento: new THREE.BoxGeometry(0.17, 0.045, 0.12),
   rice: new THREE.BoxGeometry(0.075, 0.012, 0.1),
   dish: new THREE.SphereGeometry(0.022, 8, 6),
@@ -282,6 +292,10 @@ export interface AvatarModelProps {
   pose: Pose;
   /** タイピング中 */
   working?: boolean;
+  /** true の間は歩行モーション（脚と腕を振る） */
+  walkRef?: React.MutableRefObject<boolean>;
+  /** 季節の帽子 */
+  hat?: 'santa' | 'witch';
   /** 休憩中の過ごし方：食事 / コーヒー / 立ち話 */
   activity?: BreakActivity;
   /** 変化するとクリック時リアクションを再生 */
@@ -303,6 +317,8 @@ export const AvatarModel = memo(function AvatarModel({
   pose,
   working = false,
   activity,
+  hat,
+  walkRef,
   reactKey = 0,
   presence,
   phase = 0,
@@ -316,6 +332,8 @@ export const AvatarModel = memo(function AvatarModel({
   const armR = useRef<THREE.Group>(null!);
   const foreL = useRef<THREE.Group>(null!);
   const foreR = useRef<THREE.Group>(null!);
+  const thighs = useRef<(THREE.Group | null)[]>([]);
+  const shins = useRef<(THREE.Group | null)[]>([]);
   const mug = useRef<THREE.Group>(null);
   const bento = useRef<THREE.Group>(null);
   const react = useRef({ key: reactKey, start: -10 });
@@ -348,9 +366,43 @@ export const AvatarModel = memo(function AvatarModel({
 
     // リアクション：ジャンプ（立ち）/ 体を弾ませる（座り）
     const hop = reacting ? Math.sin(rp * Math.PI) * (sit ? 0.05 : 0.16) : 0;
-    hips.current.position.y = (sit ? 0.5 : 0.86) + hop;
+    const walking = !!walkRef?.current;
+    const seated = sit && !walking;
+    hips.current.position.y = (seated ? 0.5 : 0.86) + hop;
 
-    if (sit) {
+    // 脚：座り / 立ち / 歩行
+    const stride = walking ? Math.sin(state.clock.elapsedTime * 9 + phase) : 0;
+    thighs.current.forEach((g, i) => {
+      if (!g) return;
+      const side = i === 0 ? 1 : -1;
+      g.rotation.x = seated ? Math.PI / 2 - 0.12 : stride * 0.5 * side;
+    });
+    shins.current.forEach((g, i) => {
+      if (!g) return;
+      const side = i === 0 ? 1 : -1;
+      g.rotation.x = seated ? -(Math.PI / 2 - 0.12) : walking ? -Math.max(0, -stride * side) * 0.7 : 0;
+    });
+
+    if (walking) {
+      hips.current.position.y = 0.86 + Math.abs(stride) * 0.03;
+      hips.current.rotation.z = 0;
+      torso.current.rotation.x = -0.04;
+      head.current.rotation.set(0.02, 0, 0);
+      armL.current.rotation.set(-stride * 0.45, 0, -0.08);
+      armR.current.rotation.set(stride * 0.45, 0, 0.08);
+      foreL.current.rotation.x = 0.25;
+      foreR.current.rotation.x = 0.25;
+    } else if (activity === 'cheer') {
+      // ハイタッチ：両手を上げて喜ぶ
+      const k = Math.sin(t * 6);
+      hips.current.position.y = 0.86 + Math.max(0, Math.sin(t * 6)) * 0.12;
+      torso.current.rotation.x = -0.05;
+      head.current.rotation.set(-0.15, 0, 0);
+      armL.current.rotation.set(-0.3, 0, -2.6 - k * 0.15);
+      armR.current.rotation.set(-0.3, 0, 2.6 + k * 0.15);
+      foreL.current.rotation.x = 0.2;
+      foreR.current.rotation.x = 0.2;
+    } else if (sit) {
       // 前傾してモニターを見る
       torso.current.rotation.x = working ? -0.14 : -0.04;
       head.current.rotation.x = working ? 0.12 + Math.sin(t * 0.6) * 0.03 : 0.02;
@@ -437,9 +489,22 @@ export const AvatarModel = memo(function AvatarModel({
         {cos?.tail === 'long' && <mesh geometry={G.tailLong} material={top} position={[0.03, 0.08, 0.22]} rotation={[-0.9, 0, -0.2]} />}
         {cos?.tail === 'dino' && <mesh geometry={G.tailDino} material={top} position={[0, -0.06, 0.32]} rotation-x={Math.PI / 2 + 0.3} castShadow={castShadow} />}
         {[-1, 1].map((side) => (
-          <group key={side} position={[side * 0.085, -0.02, 0]} rotation-x={sit ? Math.PI / 2 - 0.12 : 0}>
+          <group
+            key={side}
+            ref={(g) => {
+              thighs.current[side < 0 ? 0 : 1] = g;
+            }}
+            position={[side * 0.085, -0.02, 0]}
+            rotation-x={sit ? Math.PI / 2 - 0.12 : 0}
+          >
             <mesh geometry={G.thigh} material={bottom} position-y={-0.19} castShadow={castShadow} />
-            <group position-y={-0.38} rotation-x={sit ? -(Math.PI / 2 - 0.12) : 0}>
+            <group
+              ref={(g) => {
+                shins.current[side < 0 ? 0 : 1] = g;
+              }}
+              position-y={-0.38}
+              rotation-x={sit ? -(Math.PI / 2 - 0.12) : 0}
+            >
               <mesh geometry={G.shin} material={bottom} position-y={-0.17} castShadow={castShadow} />
               <mesh geometry={G.shoe} material={shoe} position={[0, -0.36, -0.04]} castShadow={castShadow} />
             </group>
@@ -466,6 +531,20 @@ export const AvatarModel = memo(function AvatarModel({
             <mesh geometry={G.eye} material={EYE} position={[0.042, 0.008, -0.113]} />
             <mesh geometry={G.brow} material={mat(c.hairColor, 0.6)} position={[-0.043, 0.04, -0.113]} />
             <mesh geometry={G.brow} material={mat(c.hairColor, 0.6)} position={[0.043, 0.04, -0.113]} />
+            {hat === 'santa' && !cos && (
+              <group position={[0, 0.12, 0.01]} rotation={[0.25, 0, -0.15]}>
+                <mesh geometry={G2.santaCone} material={HAT_RED} position-y={0.12} />
+                <mesh geometry={G2.santaBrim} material={HAT_WHITE} rotation-x={Math.PI / 2} />
+                <mesh geometry={G2.santaBall} material={HAT_WHITE} position={[0, 0.26, 0]} />
+              </group>
+            )}
+            {hat === 'witch' && !cos && (
+              <group position={[0, 0.11, 0]} rotation={[0.1, 0, 0.12]}>
+                <mesh geometry={G2.witchBrim} material={HAT_BLACK} />
+                <mesh geometry={G2.witchBand} material={HAT_BAND} position-y={0.03} />
+                <mesh geometry={G2.witchCone} material={HAT_BLACK} position-y={0.17} rotation-z={-0.15} />
+              </group>
+            )}
             {cos ? (
               <CostumeHood s={cos} />
             ) : (

@@ -53,6 +53,8 @@ export interface AttendanceRecord {
   lastSeenAt?: string;
   /** 日付が変わって自動で退勤扱いになった場合 */
   autoClosed?: boolean;
+  /** 頭上に表示するひとこと（吹き出し） */
+  message?: string;
 }
 
 /** 勤怠の打刻イベント（出勤・休憩・会議・退勤） */
@@ -176,6 +178,19 @@ export interface CompanySettings {
   autoOfficeUpgrades: boolean;
   /** 手動選択時のオフィスレベル */
   manualOfficeLevel: number;
+  /** 時間帯の雰囲気（auto = 現在時刻に連動） */
+  timeOfDay?: 'auto' | 'morning' | 'day' | 'evening' | 'night';
+  /** 季節イベントの飾り付け（auto = 日付に連動） */
+  season?: 'auto' | 'none' | 'halloween' | 'christmas' | 'newyear';
+}
+
+/** アバターへのリアクション（👍👏🔥 など） */
+export interface Reaction {
+  id: ID;
+  fromId: ID;
+  toId: ID;
+  emoji: string;
+  at: string;
 }
 
 // ---------- 3D表示データ ----------
@@ -220,6 +235,7 @@ export interface BusinessData {
   missionClaims: MissionClaim[];
   notifications: AppNotification[];
   assets: AssetMeta[];
+  reactions?: Reaction[];
   settings: CompanySettings;
   /** 最後にアプリが開かれた日付（日付変更時の勤怠ロールオーバー判定） */
   lastActiveDate: string;

@@ -59,6 +59,12 @@ interface AppState {
   setEmployeeStatus: (employeeId: string, status: AttendanceStatus) => void;
   touch: () => void;
   saveCorrection: (c: Omit<AttendanceCorrection, 'by' | 'at'>) => void;
+  /** 頭上の吹き出し（ひとこと）を設定。null で消す */
+  setMyMessage: (text: string | null) => void;
+  /** アバターにリアクションを送る */
+  sendReaction: (toId: string, emoji: string) => void;
+  /** プロジェクト完了のハイタッチを再生 */
+  celebrateProject: (projectId: string) => void;
   removeCorrection: (employeeId: string, date: string) => void;
 
   // タスク
@@ -318,7 +324,7 @@ export const useApp = create<AppState>((set, get) => {
       const id = get().currentUserId;
       if (!id) return;
       ui().pushFx({ kind: 'leave', employeeId: id });
-      setAttendance(id, { status: 'off', clockOutAt: nowIso(), lastSeenAt: nowIso() });
+      setAttendance(id, { status: 'off', clockOutAt: nowIso(), lastSeenAt: nowIso(), message: undefined });
       notify({ employeeId: id, kind: 'attendance', title: '退勤しました', body: 'お疲れさまでした。' });
       ui().toast({ tone: 'info', title: '退勤しました', body: 'お疲れさまでした' });
     },
@@ -362,6 +368,32 @@ export const useApp = create<AppState>((set, get) => {
       if (status === 'off' && att?.status !== 'off') ui().pushFx({ kind: 'leave', employeeId });
       if (status !== 'off' && att?.status === 'off') ui().pushFx({ kind: 'arrive', employeeId });
       setAttendance(employeeId, patch);
+    },
+
+    setMyMessage: (text) => {
+      const id = get().currentUserId;
+      if (!id) return;
+      const message = text?.trim().slice(0, 30) || undefined;
+      patchBusiness((b) => ({ attendance: { ...b.attendance, [id]: { ...(b.attendance[id] ?? { employeeId: id, status: 'off' }), message } } }));
+    },
+
+    sendReaction: (toId, emoji) => {
+      const me = get().currentUserId;
+      if (!me) return;
+      const from = get().business.employees.find((e) => e.id === me)?.name ?? '';
+      patchBusiness((b) => ({
+        reactions: [...(b.reactions ?? []), { id: uid('rx'), fromId: me, toId, emoji, at: nowIso() }].slice(-60),
+      }));
+      if (toId !== me) notify({ employeeId: toId, kind: 'info', title: `${from} から ${emoji}`, body: 'リアクションが届きました' });
+    },
+
+    celebrateProject: (projectId) => {
+      const b = get().business;
+      const project = b.projects.find((p) => p.id === projectId);
+      if (!project) return;
+      const memberIds = b.employees.filter((e) => e.projectIds.includes(projectId) || b.tasks.some((t) => t.projectId === projectId && t.assigneeId === e.id)).map((e) => e.id);
+      ui().startGathering({ projectId, projectName: project.name, memberIds });
+      ui().toast({ tone: 'badge', title: `🙌 「${project.name}」のタスクがすべて完了！`, body: 'メンバーが集まってハイタッチします' });
     },
 
     saveCorrection: (c) => {
@@ -436,6 +468,16 @@ export const useApp = create<AppState>((set, get) => {
             : t,
         ),
       }));
+      if (completing && task.projectId) {
+        const projectTasks = get().business.tasks.filter((t) => t.projectId === task.projectId);
+        if (projectTasks.length > 0 && projectTasks.every((t) => t.status === 'done')) {
+          const pid = task.projectId;
+          setTimeout(() => get().celebrateProject(pid), 600);
+          const project = get().business.projects.find((p) => p.id === pid);
+          for (const e of get().business.employees.filter((x) => x.projectIds.includes(pid)))
+            notify({ employeeId: e.id, kind: 'task', title: `プロジェクト「${project?.name ?? ''}」の全タスクが完了しました`, body: 'おつかれさまでした！🙌' });
+        }
+      }
       if (completing && !task.xpAwarded && task.assigneeId) {
         awardXp(task.assigneeId, TASK_XP[task.priority], `タスク完了 [${PRIORITY_LABEL[task.priority]}] ${task.title}`, `task:${task.id}`);
       } else if (completing && task.xpAwarded) {

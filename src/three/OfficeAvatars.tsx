@@ -1,17 +1,22 @@
 // ============================================================
-// オフィス内の社員アバター配置・状態表示・クリック操作
+// オフィス内の社員アバター：通路を歩いて移動・状態表示・クリック操作
 // ============================================================
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { Label3D } from './Label3D';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { AttendanceStatus, AvatarConfig, Employee } from '../types';
 import { useApp } from '../store/appStore';
-import { useUi } from '../store/uiStore';
+import { GATHER_POINT, useUi } from '../store/uiStore';
 import { generateAvatar } from '../data/avatarFactory';
+import { hashString } from '../lib/utils';
 import { AvatarModel } from './AvatarModel';
-import type { AvatarPlacement, OfficeLayoutData } from './placements';
+import { Label3D } from './Label3D';
+import { faceTowards } from './layout';
+import { ENTRANCE, planRoute } from './nav';
+import type { NavSpot, P2 } from './nav';
+import type { AvatarPlacement, OfficeLayoutData, Pose } from './placements';
+import { useSeason } from './atmosphere';
 
 export const STATUS_COLOR: Record<AttendanceStatus, string> = {
   working: '#3ddc97',
@@ -27,13 +32,12 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
   off: '退勤',
 };
 
-const ACTIVITY_LABEL = { eat: 'ランチ中', coffee: 'コーヒー休憩', chat: '雑談中' } as const;
+const ACTIVITY_LABEL: Record<string, string> = { eat: 'ランチ中', coffee: 'コーヒー休憩', chat: '雑談中', cheer: 'ハイタッチ！' };
 
 const markerGeo = new THREE.OctahedronGeometry(0.075, 0);
 const ringGeo = new THREE.RingGeometry(0.42, 0.5, 40);
 const meRingGeo = new THREE.RingGeometry(0.5, 0.56, 48);
 const meRingOuterGeo = new THREE.RingGeometry(0.62, 0.65, 48);
-// 自分の目印：頭上の下向き矢印
 const meArrowGeo = new THREE.ConeGeometry(0.13, 0.26, 4);
 const meArrowMat = new THREE.MeshBasicMaterial({ color: '#38d6e8', toneMapped: false });
 const meRingMat = new THREE.MeshBasicMaterial({ color: '#38d6e8', transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false });
@@ -44,29 +48,43 @@ const markerMats = Object.fromEntries(
   Object.entries(STATUS_COLOR).map(([k, c]) => [k, new THREE.MeshBasicMaterial({ color: c, toneMapped: false })]),
 ) as Record<AttendanceStatus, THREE.MeshBasicMaterial>;
 
+const WALK_SPEED = 1.9;
+const COMMUTE_SPEED = 3.0;
+
+const toSpot = (p: AvatarPlacement): NavSpot => ({ x: p.x, z: p.z, rotY: p.rotY, location: p.location, pose: p.pose });
+const angleTo = (from: number, to: number) => {
+  let d = to - from;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+};
+
 interface OfficeAvatarProps {
   employee: Employee;
   config: AvatarConfig;
-  placement: AvatarPlacement;
+  /** 目的地（null = 退勤して入口から退出） */
+  target: AvatarPlacement | null;
   status: AttendanceStatus;
   isMe: boolean;
-  mode: 'live' | 'exit';
   instant: boolean;
   showName: boolean;
   deptColor: string;
-  onExited?: () => void;
+  hat?: 'santa' | 'witch';
+  message?: string;
+  onExited: () => void;
 }
 
 const OfficeAvatar = memo(function OfficeAvatar({
   employee,
   config,
-  placement,
+  target,
   status,
   isMe,
-  mode,
   instant,
   showName,
   deptColor,
+  hat,
+  message,
   onExited,
 }: OfficeAvatarProps) {
   const id = employee.id;
@@ -75,8 +93,21 @@ const OfficeAvatar = memo(function OfficeAvatar({
   const selectEmployee = useUi((s) => s.selectEmployee);
   const setHovered = useUi((s) => s.setHovered);
   const [reactKey, setReactKey] = useState(0);
-  const presence = useRef(instant ? 1 : 0);
+
+  const startAt = instant && target ? target : null;
+  const group = useRef<THREE.Group>(null!);
+  const pos = useRef({ x: startAt?.x ?? ENTRANCE.x, z: startAt?.z ?? ENTRANCE.z, rot: startAt?.rotY ?? Math.PI });
+  const route = useRef<P2[]>([]);
+  const step = useRef(0);
+  const speed = useRef(WALK_SPEED);
+  const walkRef = useRef(false);
+  const leaving = useRef(false);
   const exited = useRef(false);
+  const settledAt = useRef<AvatarPlacement | null>(startAt);
+  const presence = useRef(instant ? 1 : 0);
+  const [pose, setPose] = useState<Pose>(startAt?.pose ?? 'stand');
+  const [moving, setMoving] = useState(!startAt);
+
   const marker = useRef<THREE.Mesh>(null!);
   const ring = useRef<THREE.Mesh>(null!);
   const beam = useRef<THREE.Mesh>(null!);
@@ -101,27 +132,85 @@ const OfficeAvatar = memo(function OfficeAvatar({
   );
   useEffect(() => () => Object.values(local).forEach((m) => m.dispose()), [local]);
 
-  const sit = placement.pose === 'sit';
+  // 目的地が変わったら、通路を通るルートを計算して歩き出す
+  const targetKey = target ? `${target.location}:${target.x.toFixed(2)}:${target.z.toFixed(2)}` : 'exit';
+  const lastKey = useRef(startAt ? targetKey : '');
+  useEffect(() => {
+    if (lastKey.current === targetKey) return;
+    lastKey.current = targetKey;
+    const dest = target ? toSpot(target) : ENTRANCE;
+    const fromEntrance = !settledAt.current && !walkRef.current;
+    const from: NavSpot | P2 = fromEntrance ? ENTRANCE : walkRef.current || !settledAt.current ? [pos.current.x, pos.current.z] : toSpot(settledAt.current);
+    route.current = planRoute(from, dest);
+    step.current = 1;
+    speed.current = fromEntrance || !target ? COMMUTE_SPEED : WALK_SPEED;
+    leaving.current = !target;
+    walkRef.current = true;
+    settledAt.current = null;
+    setPose('stand');
+    setMoving(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetKey]);
+
+  const sit = pose === 'sit';
   const markerY = (sit ? 1.62 : 2.08) * config.heightScale;
-  const phase = useMemo(() => (id.charCodeAt(id.length - 1) % 17) * 0.37, [id]);
+  const phase = useMemo(() => (hashString(id) % 17) * 0.37, [id]);
 
   useFrame((state, dt) => {
     const t = state.clock.elapsedTime;
-    if (mode === 'exit') {
-      presence.current = Math.max(0, presence.current - dt * 1.1);
+    const d = Math.min(dt, 0.1);
+
+    // 歩行
+    if (walkRef.current) {
+      let remain = speed.current * d;
+      const pts = route.current;
+      while (remain > 0 && step.current < pts.length) {
+        const [tx, tz] = pts[step.current];
+        const dx = tx - pos.current.x;
+        const dz = tz - pos.current.z;
+        const len = Math.hypot(dx, dz);
+        if (len > 0.001) pos.current.rot += angleTo(pos.current.rot, faceTowards(pos.current.x, pos.current.z, tx, tz)) * Math.min(1, d * 12);
+        if (len <= remain) {
+          pos.current.x = tx;
+          pos.current.z = tz;
+          step.current++;
+          remain -= len;
+        } else {
+          pos.current.x += (dx / len) * remain;
+          pos.current.z += (dz / len) * remain;
+          remain = 0;
+        }
+      }
+      if (step.current >= pts.length) {
+        walkRef.current = false;
+        if (!leaving.current && target) {
+          pos.current.rot = target.rotY;
+          settledAt.current = target;
+          setPose(target.pose);
+          setMoving(false);
+        }
+      }
+    }
+
+    // 入口での登場・退出（光の柱）
+    if (leaving.current && !walkRef.current) {
+      presence.current = Math.max(0, presence.current - d * 1.2);
       if (presence.current <= 0 && !exited.current) {
         exited.current = true;
-        onExited?.();
+        onExited();
       }
     } else if (presence.current < 1) {
-      presence.current = Math.min(1, presence.current + dt * 0.9);
+      presence.current = Math.min(1, presence.current + d * 1.2);
     }
+
+    group.current.position.set(pos.current.x, 0, pos.current.z);
+    group.current.rotation.y = pos.current.rot;
+
     const p = presence.current;
-    // 登場・退出時の光の柱
     const beamOn = p < 1;
     beam.current.visible = beamOn;
     if (beamOn) {
-      local.beam.opacity = Math.sin(p * Math.PI) * 0.55 + (mode === 'exit' ? (1 - p) * 0.1 : 0);
+      local.beam.opacity = Math.sin(p * Math.PI) * 0.55 + (leaving.current ? (1 - p) * 0.1 : 0);
       beam.current.scale.set(1 - p * 0.5, 1, 1 - p * 0.5);
     }
     marker.current.position.y = markerY + Math.sin(t * 2 + phase) * 0.04;
@@ -135,33 +224,37 @@ const OfficeAvatar = memo(function OfficeAvatar({
     if (meOuter.current) {
       const k = (t * 0.8) % 1;
       meOuter.current.scale.setScalar(1 + k * 0.6);
-      (meOuter.current.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - k);
+      local.outer.opacity = 0.7 * (1 - k);
     }
     const showRing = selected || hovered;
     ring.current.visible = showRing && p > 0.5;
     if (showRing) {
-      const s = 1 + Math.sin(t * 3) * 0.06;
-      ring.current.scale.setScalar(s);
+      ring.current.scale.setScalar(1 + Math.sin(t * 3) * 0.06);
       local.ring.opacity = selected ? 0.95 : 0.45;
     }
   });
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
-    if (mode === 'exit') return;
+    if (!target) return;
     setReactKey((k) => k + 1);
     selectEmployee(id);
   };
 
-  const labelVisible = mode === 'live' && (selected || hovered || isMe || showName);
+  const activity = moving ? undefined : target?.activity;
+  const live = !!target;
+  const labelVisible = live && (selected || hovered || isMe || showName);
+  const statusText = target?.location === 'gather' ? 'ハイタッチ！' : moving ? '移動中' : status === 'away' && activity ? ACTIVITY_LABEL[activity] : STATUS_LABEL[status];
 
   return (
-    <group position={[placement.x, 0, placement.z]} rotation-y={placement.rotY}>
+    <group ref={group}>
       <AvatarModel
         config={config}
-        pose={placement.pose}
-        working={placement.working}
-        activity={placement.activity}
+        pose={pose}
+        working={!moving && !!target?.working}
+        activity={activity}
+        hat={hat}
+        walkRef={walkRef}
         reactKey={reactKey}
         presence={presence}
         phase={phase}
@@ -202,20 +295,22 @@ const OfficeAvatar = memo(function OfficeAvatar({
             {isMe && <span className="rounded bg-cyan-400/20 px-1 text-[9px] font-semibold text-cyan-200">YOU</span>}
             <span className="font-medium">{employee.name}</span>
             <span className="text-[10px]" style={{ color: STATUS_COLOR[status] }}>
-              {status === 'away' && placement.activity ? ACTIVITY_LABEL[placement.activity] : STATUS_LABEL[status]}
+              {statusText}
             </span>
+          </div>
+        </Label3D>
+      )}
+      {live && message && (
+        <Label3D position={[0, markerY + (labelVisible ? (isMe ? 1.2 : 0.75) : 0.42), 0]} zIndex={25}>
+          <div className="relative max-w-[180px] rounded-xl bg-white px-2.5 py-1 text-[11px] leading-snug font-medium text-zinc-800 shadow-lg">
+            {message}
+            <span className="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-white" />
           </div>
         </Label3D>
       )}
     </group>
   );
 });
-
-interface ExitGhost {
-  key: string;
-  employeeId: string;
-  placement: AvatarPlacement;
-}
 
 export const OfficeAvatars = ({ layout }: { layout: OfficeLayoutData }) => {
   const employees = useApp((s) => s.business.employees);
@@ -224,67 +319,66 @@ export const OfficeAvatars = ({ layout }: { layout: OfficeLayoutData }) => {
   const avatars = useApp((s) => s.presentation.avatars);
   const me = useApp((s) => s.currentUserId);
   const showNames = useApp((s) => s.business.settings.showNameTags);
-  const leaving = useUi((s) => s.leaving);
+  const gathering = useUi((s) => s.gathering);
+  const season = useSeason();
 
   const mountedAt = useRef(performance.now());
-  const prev = useRef<Record<string, AvatarPlacement>>({});
-  const [ghosts, setGhosts] = useState<ExitGhost[]>([]);
+  const [exiting, setExiting] = useState<string[]>([]);
+  const prevIds = useRef<Set<string>>(new Set());
 
-  // 退勤・状態変更で消えた社員は退出演出用のゴーストとして一時的に残す
-  useEffect(() => {
-    const before = prev.current;
-    const gone: ExitGhost[] = [];
-    for (const [id, pl] of Object.entries(before)) {
-      const now = layout.placements[id];
-      const moved = now && (now.location !== pl.location || now.x !== pl.x || now.z !== pl.z);
-      if (!now || moved) gone.push({ key: `${id}-${Date.now()}`, employeeId: id, placement: pl });
+  // ハイタッチ中のメンバーは集合場所へ
+  const targets = useMemo(() => {
+    const t: Record<string, AvatarPlacement> = { ...layout.placements };
+    if (gathering) {
+      const ids = gathering.memberIds.filter((id) => t[id]);
+      const r = 0.9 + ids.length * 0.12;
+      ids.forEach((id, i) => {
+        const a = (i / ids.length) * Math.PI * 2;
+        const x = GATHER_POINT[0] + Math.cos(a) * r;
+        const z = GATHER_POINT[1] + Math.sin(a) * r;
+        t[id] = { employeeId: id, x, z, rotY: faceTowards(x, z, GATHER_POINT[0], GATHER_POINT[1]), pose: 'stand', location: 'gather', working: false, activity: 'cheer' };
+      });
     }
-    if (gone.length) setGhosts((g) => [...g, ...gone]);
-    prev.current = layout.placements;
-  }, [layout.placements]);
+    return t;
+  }, [layout.placements, gathering]);
+
+  // 退勤した社員は入口まで歩いてから消える
+  useEffect(() => {
+    const now = new Set(Object.keys(targets));
+    const gone = [...prevIds.current].filter((id) => !now.has(id) && employees.some((e) => e.id === id));
+    setExiting((list) => {
+      const next = list.filter((id) => !now.has(id));
+      for (const id of gone) if (!next.includes(id)) next.push(id);
+      return next.length === list.length && next.every((v, i) => v === list[i]) ? list : next;
+    });
+    prevIds.current = now;
+  }, [targets, employees]);
 
   const empById = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
   const deptColor = useMemo(() => Object.fromEntries(departments.map((d) => [d.id, d.color])), [departments]);
-  const instant = performance.now() - mountedAt.current < 1200;
+  const instant = performance.now() - mountedAt.current < 1500;
+  const ids = [...new Set([...Object.keys(targets), ...exiting])];
 
   return (
     <group>
-      {Object.values(layout.placements).map((pl) => {
-        const e = empById[pl.employeeId];
+      {ids.map((id) => {
+        const e = empById[id];
         if (!e) return null;
-        // 自分の退勤演出中は退出アニメーションへ
-        const exiting = leaving && e.id === me;
+        const hat = season === 'christmas' ? 'santa' : season === 'halloween' && hashString(id) % 3 === 0 ? 'witch' : undefined;
         return (
           <OfficeAvatar
-            key={`${e.id}:${pl.location}:${pl.x.toFixed(2)}`}
+            key={id}
             employee={e}
-            config={avatars[e.id] ?? generateAvatar(e.id)}
-            placement={pl}
-            status={attendance[e.id]?.status ?? 'off'}
-            isMe={e.id === me}
-            mode={exiting ? 'exit' : 'live'}
+            config={avatars[id] ?? generateAvatar(id)}
+            target={targets[id] ?? null}
+            status={attendance[id]?.status ?? 'off'}
+            isMe={id === me}
             instant={instant}
             showName={showNames}
             deptColor={deptColor[e.departmentId] ?? '#38d6e8'}
-          />
-        );
-      })}
-      {ghosts.map((g) => {
-        const e = empById[g.employeeId];
-        if (!e) return null;
-        return (
-          <OfficeAvatar
-            key={g.key}
-            employee={e}
-            config={avatars[e.id] ?? generateAvatar(e.id)}
-            placement={g.placement}
-            status={attendance[e.id]?.status ?? 'off'}
-            isMe={false}
-            mode="exit"
-            instant
-            showName={false}
-            deptColor={deptColor[e.departmentId] ?? '#38d6e8'}
-            onExited={() => setGhosts((list) => list.filter((x) => x.key !== g.key))}
+            hat={hat}
+            message={attendance[id]?.message}
+            onExited={() => setExiting((list) => list.filter((x) => x !== id))}
           />
         );
       })}

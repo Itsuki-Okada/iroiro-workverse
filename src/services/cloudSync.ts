@@ -29,6 +29,7 @@ const BUSINESS_KEYS: (keyof BusinessData)[] = [
   'missionClaims',
   'notifications',
   'assets',
+  'reactions',
   'settings',
 ];
 const PRESENTATION = 'presentation';

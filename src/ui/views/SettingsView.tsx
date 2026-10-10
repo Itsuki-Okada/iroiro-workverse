@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Database, Download, Eye, Monitor, Palette, Plus, RefreshCw, Shield, Tags, Trash2 } from 'lucide-react';
+import { Database, Download, Eye, Monitor, Palette, Plus, RefreshCw, Shield, Sparkles, Tags, Trash2 } from 'lucide-react';
 import type { ViewScope } from '../../types';
 import { useApp } from '../../store/appStore';
 import { useUi } from '../../store/uiStore';
@@ -175,6 +175,34 @@ export const SettingsView = () => {
           <div className="mt-3">
             <Toggle on={settings.showNameTags} onChange={(v) => updateSettings({ showNameTags: v })} label="すべての社員の名前を常に表示" />
           </div>
+        </Section>
+
+        <Section icon={<Sparkles size={17} />} title="オフィスの雰囲気" desc="時間帯や季節に合わせて、照明・窓の外の景色・飾り付けが変わります。">
+          <div className="label">時間帯</div>
+          <Segmented
+            value={settings.timeOfDay ?? 'auto'}
+            onChange={(v) => updateSettings({ timeOfDay: v })}
+            options={[
+              ['auto', '自動'],
+              ['morning', '朝'],
+              ['day', '昼'],
+              ['evening', '夕方'],
+              ['night', '夜'],
+            ]}
+          />
+          <div className="label mt-3">季節イベント</div>
+          <Segmented
+            value={settings.season ?? 'auto'}
+            onChange={(v) => updateSettings({ season: v })}
+            options={[
+              ['auto', '自動'],
+              ['none', 'なし'],
+              ['halloween', 'ハロウィン'],
+              ['christmas', 'クリスマス'],
+              ['newyear', 'お正月'],
+            ]}
+          />
+          <p className="mt-2 text-xs text-zinc-500">「自動」は現在の時刻・日付に連動します（10月はハロウィン、12/1〜25はクリスマス、年末年始はお正月）。</p>
         </Section>
 
         <Section icon={<Eye size={17} />} title="オフィス設備" desc="会社の成長に応じて内装が自動で進化します。手動でレベルを選んでプレビューすることもできます。">

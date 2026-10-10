@@ -1,7 +1,9 @@
 // ============================================================
 // 建築構造：床・カーテンウォール・柱・天井まわり・外構
 // ============================================================
-import { memo, useLayoutEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { ATMOSPHERE } from './atmosphere';
+import type { DayPhase } from './atmosphere';
 import * as THREE from 'three';
 import { BUILDING, WALL_HEIGHT } from './layout';
 import { getGeometries, getMaterials } from './materials';
@@ -54,7 +56,7 @@ const CurtainWall = ({
 };
 
 /** 遠景の高層ビル群（InstancedMesh 1回の描画） */
-const City = memo(function City() {
+const City = memo(function City({ glow }: { glow: number }) {
   const ref = useRef<THREE.InstancedMesh>(null!);
   const count = 46;
   const material = useMemo(() => {
@@ -93,10 +95,14 @@ const City = memo(function City() {
       material.dispose();
     };
   }, [material]);
+  useEffect(() => {
+    material.emissiveIntensity = glow;
+  }, [material, glow]);
   return <instancedMesh ref={ref} args={[getGeometries().box, material, count]} />;
 });
 
-export const Building = memo(function Building({ quality }: { quality: 'high' | 'low' }) {
+export const Building = memo(function Building({ quality, phase }: { quality: 'high' | 'low'; phase: DayPhase }) {
+  const atmos = ATMOSPHERE[phase];
   const m = getMaterials();
   const { x0, x1, z0, z1 } = BUILDING;
   const W = x1 - x0;
@@ -114,13 +120,13 @@ export const Building = memo(function Building({ quality }: { quality: 'high' | 
       {/* 外構 */}
       <mesh rotation-x={-Math.PI / 2} position-y={-0.32} receiveShadow>
         <planeGeometry args={[600, 600]} />
-        <meshStandardMaterial color="#0b0d10" roughness={1} />
+        <meshStandardMaterial color={atmos.ground} roughness={1} />
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position={[0, -0.3, z1 + 6]} receiveShadow>
         <planeGeometry args={[W + 10, 12]} />
         <meshStandardMaterial color="#1a1c1f" roughness={0.85} />
       </mesh>
-      <City />
+      <City glow={atmos.city} />
 
       {/* 床スラブ */}
       <Box s={[W + 1, 0.3, D + 1]} p={[0, -0.15, 0]} m={m.slab} cast={false} />

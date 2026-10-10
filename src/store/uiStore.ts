@@ -33,7 +33,8 @@ export type FxEvent =
   | { id: string; kind: 'taskComplete'; employeeId: string; xp: number }
   | { id: string; kind: 'levelUp'; employeeId: string; level: number }
   | { id: string; kind: 'arrive'; employeeId: string }
-  | { id: string; kind: 'leave'; employeeId: string };
+  | { id: string; kind: 'leave'; employeeId: string }
+  | { id: string; kind: 'confetti'; x: number; z: number };
 
 export interface Toast {
   id: string;
@@ -49,7 +50,19 @@ export interface LevelUpOverlay {
   name: string;
 }
 
+export interface Gathering {
+  id: string;
+  projectId: string;
+  projectName: string;
+  memberIds: string[];
+}
+
+/** ハイタッチの集合場所（受付と共有スペースの間） */
+export const GATHER_POINT: [number, number] = [0, 6.4];
+
 interface UiState {
+  gathering: Gathering | null;
+  startGathering: (g: Omit<Gathering, 'id'>) => void;
   view: ViewKey;
   selectedEmployeeId: string | null;
   selectedDepartmentId: string | null;
@@ -95,6 +108,15 @@ let nonce = 0;
 
 export const useUi = create<UiState>((set, get) => ({
   view: 'office',
+  gathering: null,
+  startGathering: (g) => {
+    const id = uid('gather');
+    set({ gathering: { ...g, id } });
+    // 集合したら紙吹雪、しばらくしたら解散
+    setTimeout(() => get().gathering?.id === id && get().pushFx({ kind: 'confetti', x: GATHER_POINT[0], z: GATHER_POINT[1] }), 9000);
+    setTimeout(() => get().gathering?.id === id && set({ gathering: null }), 19000);
+    setTimeout(() => get().view === 'office' && get().cameraTo({ kind: 'point', x: GATHER_POINT[0], z: GATHER_POINT[1] }), 800);
+  },
   selectedEmployeeId: null,
   selectedDepartmentId: null,
   hoveredEmployeeId: null,

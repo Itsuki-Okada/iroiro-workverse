@@ -46,12 +46,12 @@ export const CameraRig = ({
     handled.current = cmd.nonce;
     const az = c.azimuthAngle;
     // 右側の情報パネルに隠れないよう、注視点を画面右方向へずらす（対象は画面左寄りに映る）
-    const toward = (ox: number, oy: number, oz: number, dist: number, polar: number, shift = 0) => {
+    const toward = (ox: number, oy: number, oz: number, dist: number, polar: number, shift = 0, fixedAz?: number) => {
       // 壁際の対象でカメラが建物の外に出てしまう場合は、建物の中心側から見る
-      let a = az;
+      let a = fixedAz ?? az;
       const probe = new THREE.Vector3().setFromSphericalCoords(dist, polar, a);
       const m = 1.5;
-      if (ox + probe.x > BUILDING.x1 - m || ox + probe.x < BUILDING.x0 + m || oz + probe.z > BUILDING.z1 - m || oz + probe.z < BUILDING.z0 + m) {
+      if (fixedAz === undefined && (ox + probe.x > BUILDING.x1 - m || ox + probe.x < BUILDING.x0 + m || oz + probe.z > BUILDING.z1 - m || oz + probe.z < BUILDING.z0 + m)) {
         a = Math.atan2(-ox, 6 - oz);
       }
       const tx = ox + Math.cos(a) * shift;
@@ -93,6 +93,12 @@ export const CameraRig = ({
         const [x, z] = rectCenter(r);
         const [w, d] = rectSize(r);
         const dist = Math.max(w, d) * 0.75 + 5;
+        // 受付は入口側から見下ろす（ロゴ壁の裏側から見ないように）
+        if (cmd.area === 'reception') {
+          if (isMobileNow()) toward(x, -1, z, 20, 0.45, 0, 0.25);
+          else toward(x, 0.6, z, 14, 0.5, 0, 0.25);
+          break;
+        }
         if (isMobileNow()) toward(x, -1.2, z, dist * 1.45, 0.85, 0);
         else toward(x, 0.6, z, dist, 0.85, 1.5);
         break;

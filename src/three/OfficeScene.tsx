@@ -23,6 +23,10 @@ import { FloorPicker } from './FloorPicker';
 import { MEETING_SEATS } from './layout';
 import { CEO_CHAIR, useOfficeLayout } from './placements';
 import { FloorPlan2D } from '../ui/FloorPlan2D';
+import { ATMOSPHERE, useDayPhase, useSeason } from './atmosphere';
+import { SeasonalDecor } from './Seasonal';
+import { OfficeCat } from './OfficeCat';
+import { getMaterials } from './materials';
 import { useIsMobile } from '../ui/hooks';
 
 /** スマホでは自動的に軽量モード（影・追加光源なし、低解像度） */
@@ -62,28 +66,44 @@ const ShadowThrottle = ({ every = 3 }: { every?: number }) => {
   return null;
 };
 
-const Lights = ({ quality }: { quality: 'high' | 'low' }) => (
-  <>
-    <hemisphereLight args={['#e6eef5', '#262a30', 1.0]} />
-    <ambientLight intensity={0.28} />
-    <directionalLight
-      position={[22, 38, 16]}
-      intensity={2.3}
-      color="#f4f7ff"
-      castShadow={quality === 'high'}
-      shadow-mapSize={[2048, 2048]}
-      shadow-bias={-0.0004}
-      shadow-normalBias={0.03}
-      shadow-camera-left={-36}
-      shadow-camera-right={36}
-      shadow-camera-top={26}
-      shadow-camera-bottom={-26}
-      shadow-camera-near={5}
-      shadow-camera-far={90}
-    />
-    <directionalLight position={[-30, 20, -10]} intensity={0.25} color="#9fc7d6" />
-  </>
-);
+/** 時間帯に応じた光・背景・露出 */
+const Lights = ({ quality }: { quality: 'high' | 'low' }) => {
+  const a = ATMOSPHERE[useDayPhase()];
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    gl.toneMappingExposure = a.exposure;
+    // 天井照明の発光色（夜は暖色）
+    getMaterials().lightPanel.emissive.set(a.panel);
+  }, [gl, a]);
+  return (
+    <>
+      <color attach="background" args={[a.bg]} />
+      <hemisphereLight args={[a.skyColor, a.groundColor, a.hemi]} />
+      <ambientLight intensity={a.ambient} />
+      <directionalLight
+        position={a.sunPos}
+        intensity={a.sunIntensity}
+        color={a.sun}
+        castShadow={quality === 'high'}
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.03}
+        shadow-camera-left={-42}
+        shadow-camera-right={42}
+        shadow-camera-top={36}
+        shadow-camera-bottom={-36}
+        shadow-camera-near={2}
+        shadow-camera-far={120}
+      />
+      <directionalLight position={[-30, 20, -10]} intensity={0.25} color="#9fc7d6" />
+    </>
+  );
+};
+
+const SceneFog = ({ mobile }: { mobile: boolean }) => {
+  const a = ATMOSPHERE[useDayPhase()];
+  return <fog attach="fog" args={mobile ? [a.bg, 160, 420] : [a.bg, 90, 330]} />;
+};
 
 /** 反射用の環境マップ（外部HDRを使わず Lightformer で生成） */
 const OfficeEnvironment = () => (
@@ -116,6 +136,8 @@ const SceneContent = () => {
   const companyName = useApp((s) => s.business.company.name);
   const quality = useQuality();
   const officeLevel = useOfficeLevel();
+  const phase = useDayPhase();
+  const season = useSeason();
 
   const counts = useMemo(() => {
     const c: Record<string, { present: number; total: number }> = {};
@@ -149,11 +171,13 @@ const SceneContent = () => {
       <Suspense fallback={null}>
         <OfficeEnvironment />
       </Suspense>
-      <Building quality={quality} />
+      <Building quality={quality} phase={phase} />
       <Zones departments={departments} counts={counts} desks={layout.desks} />
-      <Interior officeLevel={officeLevel} quality={quality} companyName={companyName} stats={stats} />
+      <Interior officeLevel={officeLevel} quality={quality} companyName={companyName} stats={stats} phase={phase} />
       <Workstations desks={layout.desks} chairs={STATIC_CHAIRS} />
+      <SeasonalDecor season={season} desks={layout.desks} />
       <OfficeAvatars layout={layout} />
+      <OfficeCat desks={layout.desks} />
       <Effects placements={layout.placements} />
       <CameraRig placements={layout.placements} homeSeats={layout.homeSeats} />
       <FloorPicker />
@@ -214,12 +238,10 @@ export const OfficeScene = () => {
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.3;
         }}
         onPointerMissed={() => document.body.style.removeProperty('cursor')}
       >
-        <color attach="background" args={['#0a0c0f']} />
-        <fog attach="fog" args={mobile ? ['#0a0c0f', 160, 420] : ['#0a0c0f', 90, 330]} />
+        <SceneFog mobile={mobile} />
         <PerformanceMonitor
           onDecline={() => setDpr((d) => Math.max(minDpr, +(d - 0.25).toFixed(2)))}
           onIncline={() => setDpr((d) => Math.min(maxDpr, +(d + 0.25).toFixed(2)))}

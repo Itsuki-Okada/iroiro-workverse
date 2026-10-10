@@ -116,6 +116,8 @@ export const ProjectsView = () => {
   const employees = useApp((s) => s.business.employees);
   const deleteProject = useApp((s) => s.deleteProject);
   const openTaskEditor = useUi((s) => s.openTaskEditor);
+  const setView = useUi((s) => s.setView);
+  const celebrateProject = useApp((s) => s.celebrateProject);
   const { dept } = useLookups();
   const [editing, setEditing] = useState<Partial<Project> | null | undefined>(undefined);
 
@@ -166,6 +168,17 @@ export const ProjectsView = () => {
                 </div>
                 <span className="text-xs text-zinc-500">期限 {formatShortDate(p.dueDate)}</span>
               </div>
+              {s.total > 0 && s.done === s.total && (
+                <button
+                  className="mt-3 rounded-lg border border-amber-300/30 bg-amber-300/[0.07] py-1.5 text-xs text-amber-100 transition hover:bg-amber-300/[0.14]"
+                  onClick={() => {
+                    celebrateProject(p.id);
+                    setView('office');
+                  }}
+                >
+                  🙌 全タスク完了！ハイタッチを見る
+                </button>
+              )}
               <div className="mt-4 flex gap-2 border-t border-white/[0.06] pt-3">
                 <button className="btn flex-1 text-xs" onClick={() => openTaskEditor(null, { projectId: p.id, departmentId: p.departmentId })}>
                   <Plus size={13} /> タスク追加

@@ -36,6 +36,7 @@ export const EmployeePanel = ({ employeeId }: { employeeId: string }) => {
   const tasks = useApp((s) => s.business.tasks);
   const achievements = useApp((s) => s.business.achievements);
   const setEmployeeStatus = useApp((s) => s.setEmployeeStatus);
+  const sendReaction = useApp((s) => s.sendReaction);
   const selectEmployee = useUi((s) => s.selectEmployee);
   const cameraTo = useUi((s) => s.cameraTo);
   const openTaskEditor = useUi((s) => s.openTaskEditor);
@@ -95,6 +96,29 @@ export const EmployeePanel = ({ employeeId }: { employeeId: string }) => {
         </div>
       </div>
 
+      {att?.message && status !== 'off' && (
+        <div className="px-5 pt-3">
+          <div className="inline-block rounded-xl bg-white px-3 py-1 text-xs font-medium text-zinc-800">💬 {att.message}</div>
+        </div>
+      )}
+      {!isMe && status !== 'off' && (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] px-5 py-3">
+          <span className="mr-1 text-[11px] text-zinc-500">リアクション</span>
+          {['👍', '👏', '🔥', '🎉', '☕'].map((e) => (
+            <button
+              key={e}
+              aria-label={`${e} を送る`}
+              className="rounded-lg bg-white/[0.04] px-2 py-0.5 text-lg transition hover:bg-white/[0.1] active:scale-90"
+              onClick={() => sendReaction(employee.id, e)}
+            >
+              {e}
+            </button>
+          ))}
+          <button className="rounded-full bg-white/[0.06] px-2.5 py-1 text-xs text-zinc-200 transition hover:bg-white/[0.12] active:scale-95" onClick={() => sendReaction(employee.id, 'お疲れさま！')}>
+            お疲れさま
+          </button>
+        </div>
+      )}
       {!canView ? (
         <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-zinc-500">
           <Lock size={20} />

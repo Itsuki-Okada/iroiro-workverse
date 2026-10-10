@@ -38,7 +38,7 @@ export interface AvatarPlacement {
   z: number;
   rotY: number;
   pose: Pose;
-  location: 'desk' | 'meeting' | 'lounge' | 'ceo';
+  location: 'desk' | 'meeting' | 'lounge' | 'ceo' | 'gather';
   /** デスク作業中（タイピングアニメーション） */
   working: boolean;
   /** 休憩中の過ごし方（食事・コーヒー・立ち話） */

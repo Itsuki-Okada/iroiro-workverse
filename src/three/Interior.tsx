@@ -12,6 +12,8 @@ import { getGeometries, getMaterials } from './materials';
 import { Box, Cyl, GlassWall, PendantLine } from './primitives';
 import { drawMediaWall, logoTexture, slideTexture } from './textures';
 import { CEO_CHAIR } from './placements';
+import { ATMOSPHERE } from './atmosphere';
+import type { DayPhase } from './atmosphere';
 
 // ---------------- 家具 ----------------
 
@@ -533,7 +535,8 @@ const CeoOffice = memo(function CeoOffice() {
 // ---------------- 照明 ----------------
 
 /** 部屋ごとの実光源（影なし）。高品質モードのみ追加光源を増やす */
-const AreaLights = memo(function AreaLights({ quality }: { quality: 'high' | 'low' }) {
+const AreaLights = memo(function AreaLights({ quality, phase }: { quality: 'high' | 'low'; phase: DayPhase }) {
+  const atmos = ATMOSPHERE[phase];
   const points: [number, number, number, number, string][] = [
     [-20, 3.2, -12, 45, '#f2f6ff'],
     [0, 3.2, -12, 45, '#f2f6ff'],
@@ -550,7 +553,7 @@ const AreaLights = memo(function AreaLights({ quality }: { quality: 'high' | 'lo
   return (
     <>
       {list.map(([x, y, z, intensity, color]) => (
-        <pointLight key={`${x}:${z}`} position={[x, y, z]} intensity={intensity} distance={18} decay={1.5} color={color} />
+        <pointLight key={`${x}:${z}`} position={[x, y, z]} intensity={intensity * atmos.interiorBoost} distance={18} decay={1.5} color={phase === 'night' || phase === 'evening' ? atmos.interior : color} />
       ))}
     </>
   );
@@ -563,11 +566,13 @@ export const Interior = ({
   quality,
   companyName,
   stats,
+  phase,
 }: {
   officeLevel: number;
   quality: 'high' | 'low';
   companyName: string;
   stats: MediaStats;
+  phase: DayPhase;
 }) => {
   return (
     <group>
@@ -577,7 +582,7 @@ export const Interior = ({
       <Cafe level={officeLevel} />
       <CeoOffice />
       <Greenery level={officeLevel} />
-      <AreaLights quality={quality} />
+      <AreaLights quality={quality} phase={phase} />
     </group>
   );
 };

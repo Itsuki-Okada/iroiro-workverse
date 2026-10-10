@@ -131,6 +131,26 @@ export const generateSeats = (area: Rect, count: number): Seat[] => {
   return all.slice(0, needed).map((s, i) => ({ ...s, index: i }));
 };
 
+/** デスク島の並び（通路計算用）。generateSeats と同じ計算 */
+export const zoneGrid = (area: Rect) => {
+  const [w, d] = rectSize(area);
+  const clusterW = DESK_W * 2;
+  const clusters = Math.max(1, Math.floor((w + CLUSTER_GAP) / (clusterW + CLUSTER_GAP)));
+  const rows = Math.max(1, Math.floor((d - POD_DEPTH) / ROW_PITCH) + 1);
+  const totalW = clusters * clusterW + (clusters - 1) * CLUSTER_GAP;
+  const totalD = (rows - 1) * ROW_PITCH;
+  const startX = (area.x0 + area.x1) / 2 - totalW / 2;
+  const startZ = (area.z0 + area.z1) / 2 - totalD / 2;
+  // 島と島の間の縦通路（X）と、列と列の間の横通路（Z）
+  const aisleX: number[] = [startX - 0.7];
+  for (let c = 1; c < clusters; c++) aisleX.push(startX + c * (clusterW + CLUSTER_GAP) - CLUSTER_GAP / 2);
+  aisleX.push(startX + totalW + 0.7);
+  const aisleZ: number[] = [startZ - 2.05];
+  for (let r = 0; r < rows - 1; r++) aisleZ.push(startZ + r * ROW_PITCH + ROW_PITCH / 2);
+  aisleZ.push(startZ + totalD + 2.05);
+  return { aisleX, aisleZ };
+};
+
 export const seatCapacity = (area: Rect) => generateSeats(area, 9999).length;
 
 /** 席の椅子位置（アバターが座る位置） */
@@ -168,7 +188,7 @@ export const CAFE_TABLES: [number, number][] = (() => {
 })();
 
 /** 休憩中の過ごし方 */
-export type BreakActivity = 'eat' | 'coffee' | 'chat';
+export type BreakActivity = 'eat' | 'coffee' | 'chat' | 'cheer';
 
 export interface BreakSpot {
   x: number;
