@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useApp } from './store/appStore';
 import { useUi } from './store/uiStore';
 import { OfficeScene } from './three/OfficeScene';
@@ -6,6 +6,7 @@ import { Header } from './ui/Header';
 import { BottomNav, BOTTOM_NAV_H, Sidebar, SIDEBAR_W } from './ui/Sidebar';
 import { useIsMobile } from './ui/hooks';
 import { NotificationWatcher } from './ui/NotificationWatcher';
+import { LogoDraw, LOGO_DRAW_SECONDS } from './ui/LogoDraw';
 import { LoginScreen } from './ui/LoginScreen';
 import { OfficeHud } from './ui/OfficeHud';
 import { TaskEditor } from './ui/TaskEditor';
@@ -56,15 +57,30 @@ const ViewOverlay = () => {
   );
 };
 
+/** 読み込み画面：ロゴを線で描くアニメーション。描き終わるまでは表示を続ける */
 const SceneLoader = () => {
   const ready = useUi((s) => s.sceneReady);
+  const [drawn, setDrawn] = useState(false);
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setDrawn(true), LOGO_DRAW_SECONDS * 1000);
+    return () => clearTimeout(t);
+  }, []);
+  const hide = ready && drawn;
+  useEffect(() => {
+    if (!hide) return;
+    const t = setTimeout(() => setGone(true), 900);
+    return () => clearTimeout(t);
+  }, [hide]);
+  if (gone) return null;
   return (
     <div
-      className={`pointer-events-none absolute inset-0 z-[45] flex flex-col items-center justify-center bg-ink-950 transition-opacity duration-700 ${ready ? 'opacity-0' : 'opacity-100'}`}
+      className={`pointer-events-none absolute inset-0 z-[45] flex flex-col items-center justify-center bg-ink-950 transition-opacity duration-700 ${hide ? 'opacity-0' : 'opacity-100'}`}
     >
-      <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/10 border-t-accent" />
-      <div className="mt-4 text-xs tracking-[0.3em] text-zinc-400">BUILDING YOUR OFFICE…</div>
-      <div className="mt-1 text-[11px] text-zinc-600">3Dオフィスを構築しています</div>
+      <LogoDraw className={`w-[min(320px,64vw)] ${drawn ? 'anim-breathe' : ''}`} />
+      <div className={`mt-8 text-[10px] tracking-[0.35em] text-zinc-500 transition-opacity duration-500 ${drawn ? 'opacity-100' : 'opacity-0'}`}>
+        {ready ? 'WELCOME' : 'BUILDING YOUR OFFICE…'}
+      </div>
     </div>
   );
 };
